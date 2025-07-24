@@ -14,16 +14,421 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      academy_videos: {
+        Row: {
+          created_at: string
+          description: string | null
+          duration_minutes: number | null
+          id: string
+          is_active: boolean | null
+          order_index: number
+          title: string
+          updated_at: string
+          video_url: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          duration_minutes?: number | null
+          id?: string
+          is_active?: boolean | null
+          order_index: number
+          title: string
+          updated_at?: string
+          video_url: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          duration_minutes?: number | null
+          id?: string
+          is_active?: boolean | null
+          order_index?: number
+          title?: string
+          updated_at?: string
+          video_url?: string
+        }
+        Relationships: []
+      }
+      clients: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          preferred_accommodation_type:
+            | Database["public"]["Enums"]["accommodation_type"]
+            | null
+          preferred_employment_type:
+            | Database["public"]["Enums"]["employment_type"]
+            | null
+          preferred_experience_type:
+            | Database["public"]["Enums"]["experience_type"]
+            | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          preferred_accommodation_type?:
+            | Database["public"]["Enums"]["accommodation_type"]
+            | null
+          preferred_employment_type?:
+            | Database["public"]["Enums"]["employment_type"]
+            | null
+          preferred_experience_type?:
+            | Database["public"]["Enums"]["experience_type"]
+            | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          preferred_accommodation_type?:
+            | Database["public"]["Enums"]["accommodation_type"]
+            | null
+          preferred_employment_type?:
+            | Database["public"]["Enums"]["employment_type"]
+            | null
+          preferred_experience_type?:
+            | Database["public"]["Enums"]["experience_type"]
+            | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clients_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      interests: {
+        Row: {
+          client_id: string
+          created_at: string
+          id: string
+          message: string | null
+          nanny_id: string
+          status: string | null
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          id?: string
+          message?: string | null
+          nanny_id: string
+          status?: string | null
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          id?: string
+          message?: string | null
+          nanny_id?: string
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "interests_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "interests_nanny_id_fkey"
+            columns: ["nanny_id"]
+            isOneToOne: false
+            referencedRelation: "nannies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nannies: {
+        Row: {
+          academy_completed: boolean | null
+          bio: string | null
+          created_at: string
+          credit_check_status:
+            | Database["public"]["Enums"]["document_status"]
+            | null
+          credit_check_url: string | null
+          criminal_check_status:
+            | Database["public"]["Enums"]["document_status"]
+            | null
+          criminal_check_url: string | null
+          education_level: Database["public"]["Enums"]["education_level"] | null
+          experience_duration: number | null
+          experience_type: Database["public"]["Enums"]["experience_type"]
+          hourly_rate: number | null
+          id: string
+          interview_video_url: string | null
+          languages: string[] | null
+          profile_approved: boolean | null
+          training_child_development: boolean | null
+          training_cpr: boolean | null
+          training_first_aid: boolean | null
+          training_nanny: boolean | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          academy_completed?: boolean | null
+          bio?: string | null
+          created_at?: string
+          credit_check_status?:
+            | Database["public"]["Enums"]["document_status"]
+            | null
+          credit_check_url?: string | null
+          criminal_check_status?:
+            | Database["public"]["Enums"]["document_status"]
+            | null
+          criminal_check_url?: string | null
+          education_level?:
+            | Database["public"]["Enums"]["education_level"]
+            | null
+          experience_duration?: number | null
+          experience_type: Database["public"]["Enums"]["experience_type"]
+          hourly_rate?: number | null
+          id?: string
+          interview_video_url?: string | null
+          languages?: string[] | null
+          profile_approved?: boolean | null
+          training_child_development?: boolean | null
+          training_cpr?: boolean | null
+          training_first_aid?: boolean | null
+          training_nanny?: boolean | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          academy_completed?: boolean | null
+          bio?: string | null
+          created_at?: string
+          credit_check_status?:
+            | Database["public"]["Enums"]["document_status"]
+            | null
+          credit_check_url?: string | null
+          criminal_check_status?:
+            | Database["public"]["Enums"]["document_status"]
+            | null
+          criminal_check_url?: string | null
+          education_level?:
+            | Database["public"]["Enums"]["education_level"]
+            | null
+          experience_duration?: number | null
+          experience_type?: Database["public"]["Enums"]["experience_type"]
+          hourly_rate?: number | null
+          id?: string
+          interview_video_url?: string | null
+          languages?: string[] | null
+          profile_approved?: boolean | null
+          training_child_development?: boolean | null
+          training_cpr?: boolean | null
+          training_first_aid?: boolean | null
+          training_nanny?: boolean | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nannies_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nanny_academy_progress: {
+        Row: {
+          completed_at: string
+          id: string
+          nanny_id: string
+          video_id: string
+        }
+        Insert: {
+          completed_at?: string
+          id?: string
+          nanny_id: string
+          video_id: string
+        }
+        Update: {
+          completed_at?: string
+          id?: string
+          nanny_id?: string
+          video_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nanny_academy_progress_nanny_id_fkey"
+            columns: ["nanny_id"]
+            isOneToOne: false
+            referencedRelation: "nannies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nanny_academy_progress_video_id_fkey"
+            columns: ["video_id"]
+            isOneToOne: false
+            referencedRelation: "academy_videos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payments: {
+        Row: {
+          amount: number
+          client_id: string
+          created_at: string
+          id: string
+          interest_id: string | null
+          nanny_id: string
+          payment_method: string | null
+          status: string | null
+          transaction_id: string | null
+        }
+        Insert: {
+          amount?: number
+          client_id: string
+          created_at?: string
+          id?: string
+          interest_id?: string | null
+          nanny_id: string
+          payment_method?: string | null
+          status?: string | null
+          transaction_id?: string | null
+        }
+        Update: {
+          amount?: number
+          client_id?: string
+          created_at?: string
+          id?: string
+          interest_id?: string | null
+          nanny_id?: string
+          payment_method?: string | null
+          status?: string | null
+          transaction_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payments_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_interest_id_fkey"
+            columns: ["interest_id"]
+            isOneToOne: false
+            referencedRelation: "interests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_nanny_id_fkey"
+            columns: ["nanny_id"]
+            isOneToOne: false
+            referencedRelation: "nannies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          city: string | null
+          created_at: string
+          email: string
+          first_name: string | null
+          id: string
+          last_name: string | null
+          phone: string | null
+          profile_picture_url: string | null
+          suburb: string | null
+          updated_at: string
+        }
+        Insert: {
+          city?: string | null
+          created_at?: string
+          email: string
+          first_name?: string | null
+          id: string
+          last_name?: string | null
+          phone?: string | null
+          profile_picture_url?: string | null
+          suburb?: string | null
+          updated_at?: string
+        }
+        Update: {
+          city?: string | null
+          created_at?: string
+          email?: string
+          first_name?: string | null
+          id?: string
+          last_name?: string | null
+          phone?: string | null
+          profile_picture_url?: string | null
+          suburb?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["user_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["user_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["user_role"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_roles_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _user_id: string
+          _role: Database["public"]["Enums"]["user_role"]
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      accommodation_type: "live_in" | "stay_out"
+      document_status: "pending" | "approved" | "rejected"
+      education_level: "matric" | "certificate" | "diploma" | "degree"
+      employment_type: "full_time" | "part_time"
+      experience_type: "nanny" | "cleaning" | "both"
+      user_role: "admin" | "nanny" | "client"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +555,13 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      accommodation_type: ["live_in", "stay_out"],
+      document_status: ["pending", "approved", "rejected"],
+      education_level: ["matric", "certificate", "diploma", "degree"],
+      employment_type: ["full_time", "part_time"],
+      experience_type: ["nanny", "cleaning", "both"],
+      user_role: ["admin", "nanny", "client"],
+    },
   },
 } as const

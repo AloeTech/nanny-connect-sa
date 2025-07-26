@@ -148,7 +148,7 @@ export default function FindNanny() {
     if (filters.city && !nanny.profiles.city.toLowerCase().includes(filters.city.toLowerCase())) {
       return false;
     }
-    if (filters.experienceType && nanny.experience_type !== filters.experienceType) {
+    if (filters.experienceType && filters.experienceType !== 'all' && nanny.experience_type !== filters.experienceType) {
       return false;
     }
     if (filters.maxRate && nanny.hourly_rate > parseFloat(filters.maxRate)) {
@@ -202,7 +202,7 @@ export default function FindNanny() {
                   <SelectValue placeholder="Any experience" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Any experience</SelectItem>
+                  <SelectItem value="all">Any experience</SelectItem>
                   <SelectItem value="nanny">Nanny only</SelectItem>
                   <SelectItem value="cleaning">Cleaning only</SelectItem>
                   <SelectItem value="both">Both nanny & cleaning</SelectItem>

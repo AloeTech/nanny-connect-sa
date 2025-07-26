@@ -48,6 +48,9 @@ export default function Navbar() {
               Academy
             </Button>
           </Link>
+          <Link to="/about">
+            <Button variant="ghost">About</Button>
+          </Link>
         </>
       )}
       
@@ -99,7 +102,7 @@ export default function Navbar() {
   );
 
   return (
-    <nav className="border-b bg-white/80 backdrop-blur-md sticky top-0 z-50">
+    <nav className="border-b bg-background/80 backdrop-blur-md sticky top-0 z-50">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
@@ -185,11 +188,21 @@ export default function Navbar() {
                           Dashboard
                         </Button>
                       </Link>
-                      <Link to="/profile">
-                        <Button variant="outline" className="w-full">
-                          Profile Settings
-                        </Button>
-                      </Link>
+                       <Link to="/profile">
+                         <Button variant="outline" className="w-full">
+                           Profile Settings
+                         </Button>
+                       </Link>
+                       <Link to="/about">
+                         <Button variant="outline" className="w-full">
+                           About
+                         </Button>
+                       </Link>
+                       <Link to="/terms">
+                         <Button variant="outline" className="w-full">
+                           Terms of Service
+                         </Button>
+                       </Link>
                       <Button
                         onClick={handleSignOut}
                         variant="destructive"

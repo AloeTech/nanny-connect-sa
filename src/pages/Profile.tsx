@@ -27,9 +27,9 @@ interface NannyProfile {
   id: string;
   bio: string;
   languages: string[];
-  experience_type: string;
+  experience_type: 'nanny' | 'cleaning' | 'both';
   experience_duration: number;
-  education_level: string;
+  education_level: 'matric' | 'certificate' | 'diploma' | 'degree';
   hourly_rate: number;
   training_first_aid: boolean;
   training_nanny: boolean;
@@ -40,9 +40,9 @@ interface NannyProfile {
 interface ClientProfile {
   id: string;
   description: string;
-  preferred_employment_type: string;
-  preferred_experience_type: string;
-  preferred_accommodation_type: string;
+  preferred_employment_type: 'full_time' | 'part_time';
+  preferred_experience_type: 'nanny' | 'cleaning' | 'both';
+  preferred_accommodation_type: 'live_in' | 'stay_out';
 }
 
 const SA_LANGUAGES = [
@@ -221,7 +221,7 @@ export default function Profile() {
         description: '',
         preferred_employment_type: 'full_time',
         preferred_experience_type: 'nanny',
-        preferred_accommodation_type: 'live_out'
+        preferred_accommodation_type: 'stay_out'
       });
     }
   };
@@ -364,7 +364,7 @@ export default function Profile() {
                       <Label htmlFor="experience_type">Experience Type</Label>
                       <Select 
                         value={nannyProfile.experience_type} 
-                        onValueChange={(value) => setNannyProfile({...nannyProfile, experience_type: value})}
+                        onValueChange={(value) => setNannyProfile({...nannyProfile, experience_type: value as 'nanny' | 'cleaning' | 'both'})}
                       >
                         <SelectTrigger>
                           <SelectValue />
@@ -394,7 +394,7 @@ export default function Profile() {
                       <Label htmlFor="education_level">Education Level</Label>
                       <Select 
                         value={nannyProfile.education_level} 
-                        onValueChange={(value) => setNannyProfile({...nannyProfile, education_level: value})}
+                        onValueChange={(value) => setNannyProfile({...nannyProfile, education_level: value as 'matric' | 'certificate' | 'diploma' | 'degree'})}
                       >
                         <SelectTrigger>
                           <SelectValue />
@@ -529,7 +529,7 @@ export default function Profile() {
                       <Label htmlFor="preferred_experience_type">Experience Type</Label>
                       <Select 
                         value={clientProfile.preferred_experience_type} 
-                        onValueChange={(value) => setClientProfile({...clientProfile, preferred_experience_type: value})}
+                        onValueChange={(value) => setClientProfile({...clientProfile, preferred_experience_type: value as 'nanny' | 'cleaning' | 'both'})}
                       >
                         <SelectTrigger>
                           <SelectValue />
@@ -547,7 +547,7 @@ export default function Profile() {
                       <Label htmlFor="preferred_employment_type">Employment Type</Label>
                       <Select 
                         value={clientProfile.preferred_employment_type} 
-                        onValueChange={(value) => setClientProfile({...clientProfile, preferred_employment_type: value})}
+                        onValueChange={(value) => setClientProfile({...clientProfile, preferred_employment_type: value as 'full_time' | 'part_time'})}
                       >
                         <SelectTrigger>
                           <SelectValue />
@@ -565,7 +565,7 @@ export default function Profile() {
                       <Label htmlFor="preferred_accommodation_type">Accommodation</Label>
                       <Select 
                         value={clientProfile.preferred_accommodation_type} 
-                        onValueChange={(value) => setClientProfile({...clientProfile, preferred_accommodation_type: value})}
+                        onValueChange={(value) => setClientProfile({...clientProfile, preferred_accommodation_type: value as 'live_in' | 'stay_out'})}
                       >
                         <SelectTrigger>
                           <SelectValue />

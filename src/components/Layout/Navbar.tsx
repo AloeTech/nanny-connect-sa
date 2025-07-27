@@ -90,6 +90,12 @@ export default function Navbar() {
               Admin Panel
             </Button>
           </Link>
+          <Link to="/admin/roles">
+            <Button variant="ghost" className="gap-2">
+              <Users className="h-4 w-4" />
+              Assign Roles
+            </Button>
+          </Link>
           <Link to="/academy">
             <Button variant="ghost" className="gap-2">
               <Video className="h-4 w-4" />
@@ -98,6 +104,14 @@ export default function Navbar() {
           </Link>
         </>
       )}
+      
+      {/* Common links for all users */}
+      <Link to="/about">
+        <Button variant="ghost">About</Button>
+      </Link>
+      <Link to="/terms">
+        <Button variant="ghost">Terms</Button>
+      </Link>
     </>
   );
 

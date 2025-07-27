@@ -12,6 +12,7 @@ import Academy from "./pages/Academy";
 import NannyDashboard from "./pages/NannyDashboard";
 import ClientDashboard from "./pages/ClientDashboard";
 import AdminPanel from "./pages/AdminPanel";
+import AdminRoleAssignment from "./pages/AdminRoleAssignment";
 import Profile from "./pages/Profile";
 import About from "./pages/About";
 import TermsOfService from "./pages/TermsOfService";
@@ -36,6 +37,7 @@ const App = () => (
               <Route path="/nanny-dashboard" element={<NannyDashboard />} />
               <Route path="/client-dashboard" element={<ClientDashboard />} />
               <Route path="/admin" element={<AdminPanel />} />
+              <Route path="/admin/roles" element={<AdminRoleAssignment />} />
               <Route path="/academy" element={<Academy />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="/about" element={<About />} />

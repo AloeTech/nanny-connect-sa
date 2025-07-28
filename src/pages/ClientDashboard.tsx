@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { Heart, CreditCard, Calendar, User, MapPin, Clock, DollarSign, Eye } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import PayButton from '@/components/PayButton';
 
 interface ClientProfile {
   id: string;
@@ -289,6 +290,16 @@ export default function ClientDashboard() {
                       {interest.message && (
                         <div className="mt-3 p-3 bg-muted rounded">
                           <p className="text-sm"><strong>Your message:</strong> {interest.message}</p>
+                        </div>
+                      )}
+                      {interest.status === 'accepted' && (
+                        <div className="mt-3">
+                          <PayButton 
+                            interestId={interest.id}
+                            amount={500}
+                            nannyName={interest.nannies.profiles.first_name}
+                            clientName={userProfile?.first_name || 'Client'}
+                          />
                         </div>
                       )}
                       <p className="text-xs text-muted-foreground mt-2">

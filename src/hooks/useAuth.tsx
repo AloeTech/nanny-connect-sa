@@ -120,6 +120,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           description: "Please check your email to confirm your account.",
           variant: "default"
         });
+
+        // Send welcome email with terms and privacy info
+        setTimeout(() => {
+          const userType = metadata?.user_type;
+          if (userType) {
+            supabase.functions.invoke('send-notification', {
+              body: {
+                to: email,
+                subject: 'Welcome to Nanny Placements SA',
+                message: `Welcome! Your account has been created successfully.`,
+                type: `welcome_${userType}`
+              }
+            }).catch(console.error);
+          }
+        }, 1000);
       }
       
       return { error };

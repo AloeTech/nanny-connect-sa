@@ -105,12 +105,30 @@ export default function Academy() {
       }
 
       // Update local progress
-      setProgress(prev => [...prev, { video_id: videoId, completed_at: new Date().toISOString() }]);
+      const newProgress = [...progress, { video_id: videoId, completed_at: new Date().toISOString() }];
+      setProgress(newProgress);
 
-      toast({
-        title: "Success",
-        description: "Video marked as complete!",
-      });
+      // Check if all videos are complete
+      const totalActiveVideos = videos.filter(v => v.is_active).length;
+      const completedVideos = newProgress.length;
+
+      if (completedVideos >= totalActiveVideos && nannyId) {
+        // Update nanny's academy_completed status
+        await supabase
+          .from('nannies')
+          .update({ academy_completed: true })
+          .eq('id', nannyId);
+
+        toast({
+          title: "Academy Complete!",
+          description: "Congratulations! You've completed all training videos. An admin will review and approve your completion.",
+        });
+      } else {
+        toast({
+          title: "Success",
+          description: "Video marked as complete!",
+        });
+      }
 
     } catch (error: any) {
       toast({

@@ -383,6 +383,17 @@ export default function AdminPanel() {
                         <X className="h-4 w-4 mr-1" />
                         Reject Profile
                       </Button>
+                      {nanny.academy_completed && !nanny.profile_approved && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => approveProfile(nanny.id, true)}
+                          className="bg-green-50 border-green-200 text-green-700 hover:bg-green-100"
+                        >
+                          <CheckCircle className="h-4 w-4 mr-1" />
+                          Approve Academy Badge
+                        </Button>
+                      )}
                     </div>
                   </div>
                 ))}

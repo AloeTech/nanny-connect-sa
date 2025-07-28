@@ -10,7 +10,11 @@ interface EmailRequest {
   to: string;
   subject: string;
   message: string;
-  type: 'welcome' | 'interest' | 'payment_success' | 'interview_setup';
+  type: string;
+  interestId?: string;
+  amount?: number;
+  nannyName?: string;
+  clientName?: string;
 }
 
 serve(async (req) => {
@@ -19,13 +23,78 @@ serve(async (req) => {
   }
 
   try {
-    const { to, subject, message, type }: EmailRequest = await req.json();
+    const { to, subject, message, type, interestId, amount, nannyName, clientName }: EmailRequest = await req.json();
 
-    // For now, log the email - in production this would send via SMTP
-    console.log(`Email notification - Type: ${type}`);
-    console.log(`To: ${to}`);
-    console.log(`Subject: ${subject}`);
-    console.log(`Message: ${message}`);
+    console.log(`Email notification - Type: ${type}`, { interestId, nannyName, clientName });
+
+    let emailContent = message;
+    
+    // Handle different email types
+    if (type === 'interview_setup' && interestId) {
+      emailContent = `Great news! Payment has been confirmed for the nanny placement service.
+
+Nanny: ${nannyName}
+Client: ${clientName}
+Amount Paid: R${amount}
+
+Next Steps:
+1. Both parties should now arrange a suitable interview time
+2. Exchange contact details to coordinate the meeting
+3. Discuss expectations, schedule, and terms
+
+Contact Information Exchange:
+- The payment confirms both parties' commitment
+- Please reach out to each other directly to arrange your interview
+- Remember to meet in a safe, public location for your first meeting
+
+🛡️ SAFETY REMINDERS:
+• Always meet in public places
+• Verify all documents independently
+• Trust your instincts
+• Bring someone with you to interviews
+• Check references thoroughly
+
+For any issues, please contact Nanny Placements SA support.
+
+Best regards,
+Nanny Placements SA Team`;
+    } else if (type === 'welcome_nanny') {
+      emailContent = `Welcome to Nanny Placements SA!
+
+Thank you for registering as a nanny on our platform. 
+
+Next Steps:
+1. Complete your profile with all required information
+2. Upload your documents (Criminal record check, Credit check)
+3. Complete our Nanny Academy training program
+4. Wait for admin approval
+
+Terms and Privacy:
+Please review our Terms of Service and Privacy Policy at your dashboard.
+
+We're committed to your safety and success. Our training academy will prepare you with essential skills for professional childcare.
+
+Best regards,
+Nanny Placements SA Team`;
+    } else if (type === 'welcome_client') {
+      emailContent = `Welcome to Nanny Placements SA!
+
+Thank you for registering as a client. We're here to help you find the perfect nanny for your family.
+
+Next Steps:
+1. Complete your profile with your family's needs
+2. Browse our verified nannies
+3. Express interest in suitable candidates
+4. Arrange interviews after payment
+
+Terms and Privacy:
+Please review our Terms of Service and Privacy Policy at your dashboard.
+
+Our nannies are verified, trained, and background-checked for your peace of mind.
+
+Best regards,
+Nanny Placements SA Team`;
+    }
 
     // Safety reminder for certain email types
     let safetyMessage = "";
@@ -42,19 +111,19 @@ serve(async (req) => {
     }
 
     // Simulate sending email (replace with actual SMTP implementation)
-    const emailContent = {
+    const finalEmailContent = {
       to,
       subject,
       html: `
         <h2>${subject}</h2>
-        <p>${message}</p>
+        <pre style="white-space: pre-wrap; font-family: Arial, sans-serif;">${emailContent}</pre>
         ${safetyMessage ? `<div style="background: #fff3cd; padding: 15px; border-radius: 5px; margin-top: 20px;">${safetyMessage}</div>` : ''}
         <p>Best regards,<br>Nanny Placements South Africa Team</p>
       `
     };
 
     return new Response(
-      JSON.stringify({ success: true, emailSent: emailContent }),
+      JSON.stringify({ success: true, emailSent: finalEmailContent }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 200,

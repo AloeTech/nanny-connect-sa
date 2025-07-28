@@ -161,24 +161,6 @@ export default function Auth() {
                   </Button>
                 </form>
 
-                {/* Demo Accounts */}
-                <div className="mt-6 p-4 bg-muted rounded-lg">
-                  <p className="text-sm font-medium mb-2">Demo Accounts:</p>
-                  <div className="space-y-2 text-xs">
-                    <div>
-                      <Badge variant="outline" className="mr-2">Admin</Badge>
-                      admin@nannyplacement.co.za / password123
-                    </div>
-                    <div>
-                      <Badge variant="outline" className="mr-2">Nanny</Badge>
-                      nanny@example.com / password123
-                    </div>
-                    <div>
-                      <Badge variant="outline" className="mr-2">Client</Badge>
-                      client@example.com / password123
-                    </div>
-                  </div>
-                </div>
               </CardContent>
             </Card>
           </TabsContent>

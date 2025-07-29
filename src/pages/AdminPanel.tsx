@@ -210,6 +210,30 @@ export default function AdminPanel() {
     }
   };
 
+  const deleteAcademyVideo = async (videoId: string) => {
+    try {
+      const { error } = await supabase
+        .from('academy_videos')
+        .delete()
+        .eq('id', videoId);
+
+      if (error) throw error;
+
+      setAcademyVideos(academyVideos.filter(video => video.id !== videoId));
+
+      toast({
+        title: "Success",
+        description: "Video deleted successfully",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  };
+
   const toggleVideoActive = async (videoId: string, isActive: boolean) => {
     try {
       const { error } = await supabase
@@ -501,6 +525,13 @@ export default function AdminPanel() {
                           onClick={() => toggleVideoActive(video.id, video.is_active)}
                         >
                           {video.is_active ? 'Deactivate' : 'Activate'}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => deleteAcademyVideo(video.id)}
+                        >
+                          Delete
                         </Button>
                       </div>
                     </div>

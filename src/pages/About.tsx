@@ -1,6 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Search, Shield, GraduationCap, Users, DollarSign, CheckCircle } from 'lucide-react';
+import ContactForm from '@/components/ContactForm';
 
 export default function About() {
   return (
@@ -217,6 +218,9 @@ export default function About() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Contact Form */}
+        <ContactForm />
       </div>
     </div>
   );

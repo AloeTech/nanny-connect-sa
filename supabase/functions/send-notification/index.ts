@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import emailjs from "npm:@emailjs/browser@4.4.1";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -110,25 +110,40 @@ Nanny Placements SA Team`;
       `;
     }
 
-    // Simulate sending email (replace with actual SMTP implementation)
-    const finalEmailContent = {
-      to,
-      subject,
-      html: `
-        <h2>${subject}</h2>
-        <pre style="white-space: pre-wrap; font-family: Arial, sans-serif;">${emailContent}</pre>
-        ${safetyMessage ? `<div style="background: #fff3cd; padding: 15px; border-radius: 5px; margin-top: 20px;">${safetyMessage}</div>` : ''}
-        <p>Best regards,<br>Nanny Placements South Africa Team</p>
-      `
-    };
+    // Send email using EmailJS
+    try {
+      const serviceID = "service_syqn4ol";
+      const templateID = "template_exkrbne";
+      const publicKey = "rK97vwvxnXTTY8PjW";
 
-    return new Response(
-      JSON.stringify({ success: true, emailSent: finalEmailContent }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 200,
-      }
-    );
+      const templateParams = {
+        name: "Nanny Placements SA",
+        email: "admin@nannyplacement.co.za",
+        subject,
+        message: emailContent + safetyMessage,
+        to_email: to,
+      };
+
+      await emailjs.send(serviceID, templateID, templateParams, publicKey);
+
+      return new Response(
+        JSON.stringify({ success: true, emailSent: true }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+        }
+      );
+    } catch (emailError) {
+      console.error("EmailJS error:", emailError);
+      // Fallback to success response as notification should not block the main process
+      return new Response(
+        JSON.stringify({ success: true, emailSent: false, error: "Email service temporarily unavailable" }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+        }
+      );
+    }
   } catch (error) {
     console.error("Error sending notification:", error);
     return new Response(

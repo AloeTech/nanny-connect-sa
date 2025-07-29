@@ -117,6 +117,54 @@ export default function NannyDashboard() {
     }
   };
 
+  const handleFileUpload = async (file: File, type: 'criminal_check' | 'credit_check' | 'interview_video') => {
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user?.id}-${type}-${Date.now()}.${fileExt}`;
+      
+      const bucketName = type === 'criminal_check' ? 'criminal-checks' : 
+                        type === 'credit_check' ? 'credit-checks' : 'interview-videos';
+      
+      const { error: uploadError } = await supabase.storage
+        .from(bucketName)
+        .upload(fileName, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from(bucketName)
+        .getPublicUrl(fileName);
+
+      // Update nanny profile with file URL
+      const updateField = type === 'criminal_check' ? 'criminal_check_url' :
+                         type === 'credit_check' ? 'credit_check_url' : 'interview_video_url';
+      
+      const { error: updateError } = await supabase
+        .from('nannies')
+        .update({ [updateField]: publicUrl })
+        .eq('user_id', user?.id);
+
+      if (updateError) throw updateError;
+
+      // Update local state
+      if (nannyProfile) {
+        setNannyProfile({ ...nannyProfile, [updateField]: publicUrl });
+      }
+
+      toast({
+        title: "Success",
+        description: `${type.replace('_', ' ')} uploaded successfully`,
+      });
+      
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  };
+
   if (userRole !== 'nanny') {
     return (
       <div className="container mx-auto px-4 py-8">
@@ -291,16 +339,70 @@ export default function NannyDashboard() {
                 </Button>
               </Link>
               {!nannyProfile?.criminal_check_url && (
-                <Button variant="outline" className="w-full justify-start">
-                  <Upload className="h-4 w-4 mr-2" />
-                  Upload Criminal Check
-                </Button>
+                <div>
+                  <input
+                    type="file"
+                    id="criminal-check-upload"
+                    accept=".pdf,.jpg,.jpeg,.png"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleFileUpload(file, 'criminal_check');
+                    }}
+                  />
+                  <Button 
+                    variant="outline" 
+                    className="w-full justify-start"
+                    onClick={() => document.getElementById('criminal-check-upload')?.click()}
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    Upload Criminal Check
+                  </Button>
+                </div>
               )}
               {!nannyProfile?.credit_check_url && (
-                <Button variant="outline" className="w-full justify-start">
-                  <Upload className="h-4 w-4 mr-2" />
-                  Upload Credit Check
-                </Button>
+                <div>
+                  <input
+                    type="file"
+                    id="credit-check-upload"
+                    accept=".pdf,.jpg,.jpeg,.png"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleFileUpload(file, 'credit_check');
+                    }}
+                  />
+                  <Button 
+                    variant="outline" 
+                    className="w-full justify-start"
+                    onClick={() => document.getElementById('credit-check-upload')?.click()}
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    Upload Credit Check
+                  </Button>
+                </div>
+              )}
+              {!nannyProfile?.interview_video_url && (
+                <div>
+                  <input
+                    type="file"
+                    id="interview-video-upload"
+                    accept=".mp4,.avi,.mov"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleFileUpload(file, 'interview_video');
+                    }}
+                  />
+                  <Button 
+                    variant="outline" 
+                    className="w-full justify-start"
+                    onClick={() => document.getElementById('interview-video-upload')?.click()}
+                  >
+                    <Video className="h-4 w-4 mr-2" />
+                    Upload Interview Video
+                  </Button>
+                </div>
               )}
             </CardContent>
           </Card>

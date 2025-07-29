@@ -117,13 +117,14 @@ export default function NannyDashboard() {
     }
   };
 
-  const handleFileUpload = async (file: File, type: 'criminal_check' | 'credit_check' | 'interview_video') => {
+  const handleFileUpload = async (file: File, type: 'criminal_check' | 'credit_check' | 'interview_video' | 'profile_picture' | 'intro_video') => {
     try {
       const fileExt = file.name.split('.').pop();
       const fileName = `${user?.id}-${type}-${Date.now()}.${fileExt}`;
       
       const bucketName = type === 'criminal_check' ? 'criminal-checks' : 
-                        type === 'credit_check' ? 'credit-checks' : 'interview-videos';
+                        type === 'credit_check' ? 'credit-checks' : 
+                        type === 'profile_picture' ? 'profile-pictures' : 'interview-videos';
       
       const { error: uploadError } = await supabase.storage
         .from(bucketName)
@@ -131,24 +132,43 @@ export default function NannyDashboard() {
 
       if (uploadError) throw uploadError;
 
-      const { data: { publicUrl } } = supabase.storage
-        .from(bucketName)
-        .getPublicUrl(fileName);
+      // Update appropriate table with file URL
+      if (type === 'profile_picture') {
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update({ profile_picture_url: fileName })
+          .eq('id', user?.id);
+        
+        if (updateError) throw updateError;
+        
+        // Update local state
+        if (userProfile) {
+          setUserProfile({ ...userProfile, profile_picture_url: fileName });
+        }
+      } else {
+        const updateData: any = {};
+        
+        if (type === 'criminal_check') {
+          updateData.criminal_check_url = fileName;
+          updateData.criminal_check_status = 'pending';
+        } else if (type === 'credit_check') {
+          updateData.credit_check_url = fileName;
+          updateData.credit_check_status = 'pending';
+        } else if (type === 'interview_video' || type === 'intro_video') {
+          updateData.interview_video_url = fileName;
+        }
 
-      // Update nanny profile with file URL
-      const updateField = type === 'criminal_check' ? 'criminal_check_url' :
-                         type === 'credit_check' ? 'credit_check_url' : 'interview_video_url';
-      
-      const { error: updateError } = await supabase
-        .from('nannies')
-        .update({ [updateField]: publicUrl })
-        .eq('user_id', user?.id);
+        const { error: updateError } = await supabase
+          .from('nannies')
+          .update(updateData)
+          .eq('user_id', user?.id);
+          
+        if (updateError) throw updateError;
 
-      if (updateError) throw updateError;
-
-      // Update local state
-      if (nannyProfile) {
-        setNannyProfile({ ...nannyProfile, [updateField]: publicUrl });
+        // Update local state
+        if (nannyProfile) {
+          setNannyProfile({ ...nannyProfile, ...updateData });
+        }
       }
 
       toast({
@@ -338,6 +358,50 @@ export default function NannyDashboard() {
                   Academy Training
                 </Button>
               </Link>
+              {!userProfile?.profile_picture_url && (
+                <div>
+                  <input
+                    type="file"
+                    id="profile-picture-upload"
+                    accept=".jpg,.jpeg,.png"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleFileUpload(file, 'profile_picture');
+                    }}
+                  />
+                  <Button 
+                    variant="outline" 
+                    className="w-full justify-start"
+                    onClick={() => document.getElementById('profile-picture-upload')?.click()}
+                  >
+                    <User className="h-4 w-4 mr-2" />
+                    Upload Profile Picture
+                  </Button>
+                </div>
+              )}
+              {!nannyProfile?.interview_video_url && (
+                <div>
+                  <input
+                    type="file"
+                    id="intro-video-upload"
+                    accept=".mp4,.avi,.mov"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleFileUpload(file, 'intro_video');
+                    }}
+                  />
+                  <Button 
+                    variant="outline" 
+                    className="w-full justify-start"
+                    onClick={() => document.getElementById('intro-video-upload')?.click()}
+                  >
+                    <Video className="h-4 w-4 mr-2" />
+                    Upload Introduction Video
+                  </Button>
+                </div>
+              )}
               {!nannyProfile?.criminal_check_url && (
                 <div>
                   <input
@@ -379,28 +443,6 @@ export default function NannyDashboard() {
                   >
                     <Upload className="h-4 w-4 mr-2" />
                     Upload Credit Check
-                  </Button>
-                </div>
-              )}
-              {!nannyProfile?.interview_video_url && (
-                <div>
-                  <input
-                    type="file"
-                    id="interview-video-upload"
-                    accept=".mp4,.avi,.mov"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) handleFileUpload(file, 'interview_video');
-                    }}
-                  />
-                  <Button 
-                    variant="outline" 
-                    className="w-full justify-start"
-                    onClick={() => document.getElementById('interview-video-upload')?.click()}
-                  >
-                    <Video className="h-4 w-4 mr-2" />
-                    Upload Interview Video
                   </Button>
                 </div>
               )}

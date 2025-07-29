@@ -34,6 +34,7 @@ interface Nanny {
     suburb: string;
     profile_picture_url: string;
   };
+  interview_video_url: string;
 }
 
 export default function FindNanny() {
@@ -239,9 +240,17 @@ export default function FindNanny() {
             <CardHeader>
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
-                    <Heart className="h-6 w-6 text-primary" />
-                  </div>
+                  {nanny.profiles.profile_picture_url ? (
+                    <img 
+                      src={`https://oqdqadcobqpzpveawzni.supabase.co/storage/v1/object/public/profile-pictures/${nanny.profiles.profile_picture_url}`}
+                      alt="Profile"
+                      className="w-12 h-12 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
+                      <Heart className="h-6 w-6 text-primary" />
+                    </div>
+                  )}
                   <div>
                     <CardTitle className="text-lg">
                       {nanny.profiles.first_name} {nanny.profiles.last_name?.charAt(0)}.
@@ -301,6 +310,18 @@ export default function FindNanny() {
                   )}
                 </div>
               </div>
+
+              {/* Introduction Video */}
+              {nanny.interview_video_url && (
+                <div>
+                  <p className="text-sm font-medium mb-2">Introduction Video:</p>
+                  <video 
+                    src={`https://oqdqadcobqpzpveawzni.supabase.co/storage/v1/object/public/interview-videos/${nanny.interview_video_url}`}
+                    controls
+                    className="w-full h-32 rounded-md object-cover"
+                  />
+                </div>
+              )}
 
               {/* Bio */}
               {nanny.bio && (

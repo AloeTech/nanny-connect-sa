@@ -60,7 +60,7 @@ export default function FindNanny() {
 
   const fetchNannies = async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('nannies')
         .select(`
           *,
@@ -71,9 +71,14 @@ export default function FindNanny() {
             suburb,
             profile_picture_url
           )
-        `)
-        .eq('profile_approved', true);
+        `);
 
+      // If not admin, only show approved profiles
+      if (userRole !== 'admin') {
+        query = query.eq('profile_approved', true);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       setNannies(data || []);
     } catch (error) {

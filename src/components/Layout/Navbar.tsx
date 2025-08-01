@@ -105,12 +105,17 @@ export default function Navbar() {
         </>
       )}
       
-      {/* Common links for authenticated users only */}
-      {user && (
-        <Link to="/terms">
-          <Button variant="ghost">Terms</Button>
-        </Link>
-      )}
+       {/* Common links for authenticated users only */}
+       {user && (
+         <>
+           <Link to="/about">
+             <Button variant="ghost">About</Button>
+           </Link>
+           <Link to="/terms">
+             <Button variant="ghost">Terms</Button>
+           </Link>
+         </>
+       )}
     </>
   );
 

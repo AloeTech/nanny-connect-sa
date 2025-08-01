@@ -61,7 +61,17 @@ export default function AdminRoleAssignment() {
     setAssigningRole(userId);
     
     try {
-      // Call the database function to assign role
+      // First, remove any existing roles for this user
+      await supabase
+        .from('user_roles')
+        .delete()
+        .eq('user_id', userId);
+
+      // Remove existing profile data
+      await supabase.from('nannies').delete().eq('user_id', userId);
+      await supabase.from('clients').delete().eq('user_id', userId);
+
+      // Call the database function to assign new role
       const { data, error } = await supabase.rpc('assign_user_role', {
         _user_id: userId,
         _role: role
@@ -170,30 +180,31 @@ export default function AdminRoleAssignment() {
                 </div>
               </CardHeader>
               
-              {!hasRole && (
-                <CardContent>
-                  <div className="flex items-center gap-4">
-                    <p className="text-sm text-muted-foreground">Assign role:</p>
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        onClick={() => assignRole(user.id, 'nanny')}
-                        disabled={assigningRole === user.id}
-                      >
-                        Assign as Nanny
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => assignRole(user.id, 'client')}
-                        disabled={assigningRole === user.id}
-                      >
-                        Assign as Client
-                      </Button>
-                    </div>
+              <CardContent>
+                <div className="flex items-center gap-4">
+                  <p className="text-sm text-muted-foreground">
+                    {hasRole ? 'Change role:' : 'Assign role:'}
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => assignRole(user.id, 'nanny')}
+                      disabled={assigningRole === user.id || currentRole === 'nanny'}
+                      variant={currentRole === 'nanny' ? 'default' : 'outline'}
+                    >
+                      {assigningRole === user.id ? 'Assigning...' : 'Nanny'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => assignRole(user.id, 'client')}
+                      disabled={assigningRole === user.id || currentRole === 'client'}
+                      variant={currentRole === 'client' ? 'default' : 'outline'}
+                    >
+                      {assigningRole === user.id ? 'Assigning...' : 'Client'}
+                    </Button>
                   </div>
-                </CardContent>
-              )}
+                </div>
+              </CardContent>
             </Card>
           );
         })}

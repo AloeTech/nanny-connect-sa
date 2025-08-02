@@ -19,26 +19,23 @@ export default function PayButton({ interestId, amount, nannyName, clientName }:
     setProcessing(true);
     
     try {
-      // For now, simulate payment and send notification emails
-      const { error } = await supabase.functions.invoke('send-notification', {
+      // Update payment status to completed
+      const { error: updateError } = await supabase.functions.invoke('update-interest', {
         body: {
-          type: 'interview_setup',
-          to: 'all_parties', // This will be handled by the edge function
-          subject: 'Interview Setup - Payment Confirmed',
-          message: `Payment confirmed for ${nannyName} and ${clientName}. Please arrange your interview.`,
           interestId,
-          amount,
-          nannyName,
-          clientName
+          updates: { payment_status: 'completed' }
         }
       });
 
-      if (error) throw error;
+      if (updateError) throw updateError;
 
       toast({
         title: "Payment Confirmed!",
-        description: "Both parties have been notified to arrange the interview. You will receive contact details via email.",
+        description: "Payment processed successfully! Waiting for admin approval to share contact details.",
       });
+
+      // Refresh the page to show updated status
+      window.location.reload();
 
     } catch (error) {
       console.error('Payment error:', error);

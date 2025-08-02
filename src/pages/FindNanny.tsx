@@ -120,6 +120,26 @@ export default function FindNanny() {
         clientId = newClient.id;
       }
 
+      // Check if client can express interest (no pending/approved interest exists)
+      const { data: existingInterest, error: checkError } = await supabase
+        .from('interests')
+        .select('id')
+        .eq('client_id', clientId)
+        .eq('nanny_id', selectedNanny.id)
+        .single();
+
+      if (checkError && checkError.code !== 'PGRST116') throw checkError;
+
+      if (existingInterest) {
+        toast({
+          title: "Interest Already Sent",
+          description: "You have already expressed interest in this nanny. Please wait for their response or contact admin.",
+          variant: "destructive"
+        });
+        setSelectedNanny(null);
+        return;
+      }
+
       // Express interest
       const { error } = await supabase
         .from('interests')
@@ -133,7 +153,7 @@ export default function FindNanny() {
 
       toast({
         title: "Interest Sent!",
-        description: "The nanny will be notified of your interest. To get their contact details, you'll need to pay R500.",
+        description: "The nanny will be notified of your interest and can approve or decline it.",
       });
 
       setSelectedNanny(null);
@@ -142,7 +162,7 @@ export default function FindNanny() {
       console.error('Error expressing interest:', error);
       toast({
         title: "Error",
-        description: "Failed to express interest",
+        description: error.message || "Failed to express interest",
         variant: "destructive"
       });
     } finally {

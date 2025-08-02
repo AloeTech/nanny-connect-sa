@@ -8,6 +8,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Heart, CreditCard, Calendar, User, MapPin, Clock, DollarSign, Eye } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import PayButton from '@/components/PayButton';
+import InterestManagement from '@/components/InterestManagement';
 
 interface ClientProfile {
   id: string;
@@ -30,6 +31,9 @@ interface Interest {
   id: string;
   message: string;
   status: string;
+  nanny_response: string;
+  payment_status: string;
+  admin_approved: boolean;
   created_at: string;
   nanny_id: string;
   nannies: {
@@ -41,6 +45,8 @@ interface Interest {
     languages: string[];
     profiles: {
       first_name: string;
+      last_name: string;
+      email: string;
       city: string;
       suburb: string;
     };
@@ -109,6 +115,8 @@ export default function ClientDashboard() {
             languages,
             profiles (
               first_name,
+              last_name,
+              email,
               city,
               suburb
             )
@@ -260,54 +268,11 @@ export default function ClientDashboard() {
                   </Link>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {interests.map((interest) => (
-                    <div key={interest.id} className="border rounded-lg p-4">
-                      <div className="flex justify-between items-start mb-3">
-                        <div>
-                          <h4 className="font-semibold">{interest.nannies.profiles.first_name}</h4>
-                          <p className="text-sm text-muted-foreground flex items-center gap-1">
-                            <MapPin className="h-3 w-3" />
-                            {interest.nannies.profiles.suburb}, {interest.nannies.profiles.city}
-                          </p>
-                        </div>
-                        {getStatusBadge(interest.status)}
-                      </div>
-                      <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div>
-                          <span className="text-muted-foreground">Experience:</span> {interest.nannies.experience_duration} years
-                        </div>
-                        <div>
-                          <span className="text-muted-foreground">Type:</span> {interest.nannies.experience_type}
-                        </div>
-                        <div>
-                          <span className="text-muted-foreground">Rate:</span> R{interest.nannies.hourly_rate}/hour
-                        </div>
-                        <div>
-                          <span className="text-muted-foreground">Languages:</span> {interest.nannies.languages.join(', ')}
-                        </div>
-                      </div>
-                      {interest.message && (
-                        <div className="mt-3 p-3 bg-muted rounded">
-                          <p className="text-sm"><strong>Your message:</strong> {interest.message}</p>
-                        </div>
-                      )}
-                      {interest.status === 'accepted' && (
-                        <div className="mt-3">
-                          <PayButton 
-                            interestId={interest.id}
-                            amount={500}
-                            nannyName={interest.nannies.profiles.first_name}
-                            clientName={userProfile?.first_name || 'Client'}
-                          />
-                        </div>
-                      )}
-                      <p className="text-xs text-muted-foreground mt-2">
-                        Sent {new Date(interest.created_at).toLocaleDateString()}
-                      </p>
-                    </div>
-                  ))}
-                </div>
+                <InterestManagement 
+                  interests={interests}
+                  userRole="client"
+                  onInterestUpdate={() => fetchData()}
+                />
               )}
             </CardContent>
           </Card>

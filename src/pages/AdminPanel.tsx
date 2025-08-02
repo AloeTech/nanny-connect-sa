@@ -9,8 +9,9 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Shield, Users, Video, FileCheck, CreditCard, CheckCircle, X, Upload, Edit } from 'lucide-react';
+import { Shield, Users, Video, FileCheck, CreditCard, CheckCircle, X, Upload, Edit, Heart } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import InterestManagement from '@/components/InterestManagement';
 
 interface NannyProfile {
   id: string;
@@ -59,6 +60,7 @@ export default function AdminPanel() {
   const [nannies, setNannies] = useState<NannyProfile[]>([]);
   const [academyVideos, setAcademyVideos] = useState<AcademyVideo[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [interests, setInterests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [newVideo, setNewVideo] = useState({
     title: '',
@@ -113,6 +115,25 @@ export default function AdminPanel() {
 
       if (paymentsData) {
         setPayments(paymentsData);
+      }
+
+      // Fetch interests
+      const { data: interestsData } = await supabase
+        .from('interests')
+        .select(`
+          *,
+          clients!inner(
+            profiles!inner(first_name, last_name, email)
+          ),
+          nannies!inner(
+            profiles!inner(first_name, last_name),
+            hourly_rate
+          )
+        `)
+        .order('created_at', { ascending: false });
+
+      if (interestsData) {
+        setInterests(interestsData);
       }
 
     } catch (error) {
@@ -306,10 +327,14 @@ export default function AdminPanel() {
       </div>
 
       <Tabs defaultValue="nannies" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="nannies" className="flex items-center gap-2">
             <Users className="h-4 w-4" />
             Nannies
+          </TabsTrigger>
+          <TabsTrigger value="interests" className="flex items-center gap-2">
+            <Heart className="h-4 w-4" />
+            Interests
           </TabsTrigger>
           <TabsTrigger value="academy" className="flex items-center gap-2">
             <Video className="h-4 w-4" />
@@ -422,6 +447,26 @@ export default function AdminPanel() {
                   </div>
                 ))}
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="interests" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Interest Management</CardTitle>
+              <CardDescription>Manage client interests and payment approvals</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {interests.length === 0 ? (
+                <p className="text-muted-foreground text-center py-8">No interests found.</p>
+              ) : (
+                <InterestManagement 
+                  interests={interests}
+                  userRole="admin"
+                  onInterestUpdate={() => fetchData()}
+                />
+              )}
             </CardContent>
           </Card>
         </TabsContent>

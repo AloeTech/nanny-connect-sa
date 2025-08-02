@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
-import { CheckCircle, Clock, Upload, Video, User, MapPin, Languages, GraduationCap, Award } from 'lucide-react';
+import { CheckCircle, Clock, Upload, Video, User, MapPin, Languages, GraduationCap, Award, Heart } from 'lucide-react';
+import InterestManagement from '@/components/InterestManagement';
 import { Link } from 'react-router-dom';
 
 interface NannyProfile {
@@ -52,6 +53,7 @@ export default function NannyDashboard() {
   const [nannyProfile, setNannyProfile] = useState<NannyProfile | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [academyProgress, setAcademyProgress] = useState<AcademyProgress>({ total_videos: 0, completed_videos: 0, progress_percentage: 0 });
+  const [interests, setInterests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -104,6 +106,20 @@ export default function NannyDashboard() {
         completed_videos: completed,
         progress_percentage: percentage
       });
+
+      // Fetch interests in this nanny
+      const { data: interestsData } = await supabase
+        .from('interests')
+        .select(`
+          *,
+          clients!inner(
+            profiles!inner(first_name, last_name, email)
+          )
+        `)
+        .eq('nanny_id', nanny?.id)
+        .order('created_at', { ascending: false });
+
+      setInterests(interestsData || []);
 
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -487,6 +503,27 @@ export default function NannyDashboard() {
                   <Clock className="h-4 w-4 text-muted-foreground" />
                 )}
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Interest Requests */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Heart className="h-5 w-5" />
+                Client Interest Requests
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {interests.length > 0 ? (
+                <InterestManagement 
+                  interests={interests}
+                  userRole="nanny"
+                  onInterestUpdate={() => fetchData()}
+                />
+              ) : (
+                <p className="text-muted-foreground">No interest requests yet.</p>
+              )}
             </CardContent>
           </Card>
         </div>

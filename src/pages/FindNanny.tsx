@@ -5,12 +5,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Heart, MapPin, Star, Clock, CheckCircle, MessageCircle } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Heart, MapPin, Star, Clock, CheckCircle, X, Eye } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
 
 interface Nanny {
   id: string;
@@ -25,16 +24,19 @@ interface Nanny {
   training_child_development: boolean;
   academy_completed: boolean;
   profile_approved: boolean;
+  criminal_check_status: string;
+  credit_check_status: string;
   hourly_rate: number;
   bio: string;
+  interview_video_url: string;
   profiles: {
     first_name: string;
     last_name: string;
     city: string;
     suburb: string;
     profile_picture_url: string;
+    email: string;
   };
-  interview_video_url: string;
 }
 
 export default function FindNanny() {
@@ -53,10 +55,17 @@ export default function FindNanny() {
   const [selectedNanny, setSelectedNanny] = useState<Nanny | null>(null);
   const [interestMessage, setInterestMessage] = useState('');
   const [sendingInterest, setSendingInterest] = useState(false);
+  const [existingInterests, setExistingInterests] = useState<string[]>([]);
+
+  // Check role for client features
+  const hasRole = userRole === 'client';
 
   useEffect(() => {
     fetchNannies();
-  }, []);
+    if (user && hasRole) {
+      fetchExistingInterests();
+    }
+  }, [user, hasRole]);
 
   const fetchNannies = async () => {
     try {
@@ -69,7 +78,8 @@ export default function FindNanny() {
             last_name,
             city,
             suburb,
-            profile_picture_url
+            profile_picture_url,
+            email
           )
         `);
 
@@ -91,6 +101,35 @@ export default function FindNanny() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchExistingInterests = async () => {
+    if (!user) return;
+    
+    try {
+      const { data: clientData } = await supabase
+        .from('clients')
+        .select('id')
+        .eq('user_id', user.id)
+        .single();
+
+      if (clientData) {
+        const { data: interests } = await supabase
+          .from('interests')
+          .select('nanny_id')
+          .eq('client_id', clientData.id);
+
+        if (interests) {
+          setExistingInterests(interests.map(i => i.nanny_id));
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching existing interests:', error);
+    }
+  };
+
+  const canExpressInterest = (nannyId: string) => {
+    return !existingInterests.includes(nannyId);
   };
 
   const handleExpressInterest = async () => {
@@ -151,6 +190,30 @@ export default function FindNanny() {
 
       if (error) throw error;
 
+      // Send email notification to nanny
+      try {
+        await supabase.functions.invoke('send-notification', {
+          body: {
+            to: selectedNanny.profiles.email,
+            subject: 'New Client Interest - Nanny Placements SA',
+            message: `You have received a new interest request from a client.
+
+Client Message: "${interestMessage}"
+
+Please log in to your nanny dashboard to approve or decline this request.
+
+Best regards,
+Nanny Placements SA Team`,
+            type: 'new_interest',
+            nannyName: `${selectedNanny.profiles.first_name} ${selectedNanny.profiles.last_name}`,
+            clientName: `${user?.user_metadata?.first_name} ${user?.user_metadata?.last_name}`
+          }
+        });
+      } catch (emailError) {
+        console.error('Error sending notification email:', emailError);
+        // Don't block the main flow if email fails
+      }
+
       toast({
         title: "Interest Sent!",
         description: "The nanny will be notified of your interest and can approve or decline it.",
@@ -158,6 +221,7 @@ export default function FindNanny() {
 
       setSelectedNanny(null);
       setInterestMessage('');
+      fetchExistingInterests(); // Refresh existing interests
     } catch (error) {
       console.error('Error expressing interest:', error);
       toast({
@@ -261,157 +325,94 @@ export default function FindNanny() {
       {/* Nannies Grid */}
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredNannies.map((nanny) => (
-          <Card key={nanny.id} className="card-hover">
-            <CardHeader>
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  {nanny.profiles.profile_picture_url ? (
-                    <img 
-                      src={`https://oqdqadcobqpzpveawzni.supabase.co/storage/v1/object/public/profile-pictures/${nanny.profiles.profile_picture_url}`}
-                      alt="Profile"
-                      className="w-12 h-12 rounded-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
-                      <Heart className="h-6 w-6 text-primary" />
-                    </div>
-                  )}
-                  <div>
-                    <CardTitle className="text-lg">
-                      {nanny.profiles.first_name} {nanny.profiles.last_name?.charAt(0)}.
-                    </CardTitle>
-                    <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                      <MapPin className="h-3 w-3" />
-                      {nanny.profiles.city}, {nanny.profiles.suburb}
-                    </div>
+          <Card key={nanny.id} className="hover:shadow-lg transition-shadow">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-4 mb-4">
+                {nanny.profiles.profile_picture_url ? (
+                  <img 
+                    src={nanny.profiles.profile_picture_url}
+                    alt="Profile"
+                    className="w-16 h-16 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
+                    <Heart className="h-8 w-8 text-primary" />
+                  </div>
+                )}
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold">{nanny.profiles.first_name}</h3>
+                  <p className="text-sm text-muted-foreground flex items-center gap-1">
+                    <MapPin className="h-3 w-3" />
+                    {nanny.profiles.city}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-xl font-semibold">{nanny.profiles.first_name}</h3>
+                  <p className="text-muted-foreground">{nanny.profiles.city}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-lg font-bold">R{nanny.hourly_rate}/hour</p>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {nanny.academy_completed && (
+                      <Badge variant="secondary">Academy Complete</Badge>
+                    )}
+                    {nanny.criminal_check_status === 'approved' && (
+                      <Badge variant="default">Criminal Check ✓</Badge>
+                    )}
+                    {nanny.credit_check_status === 'approved' && (
+                      <Badge variant="default">Credit Check ✓</Badge>
+                    )}
+                    {nanny.profile_approved && (
+                      <Badge variant="default">Profile Verified</Badge>
+                    )}
                   </div>
                 </div>
-                <Badge variant="secondary">R{nanny.hourly_rate}/hr</Badge>
-              </div>
-            </CardHeader>
-            
-            <CardContent className="space-y-4">
-              {/* Verification Badges */}
-              <div className="flex flex-wrap gap-2">
-                {nanny.academy_completed && (
-                  <Badge variant="outline" className="text-green-600 border-green-200">
-                    <CheckCircle className="h-3 w-3 mr-1" />
-                    Academy Complete
-                  </Badge>
-                )}
-                {nanny.training_first_aid && (
-                  <Badge variant="outline">First Aid</Badge>
-                )}
-                {nanny.training_cpr && (
-                  <Badge variant="outline">CPR</Badge>
-                )}
               </div>
 
-              {/* Experience */}
-              <div>
-                <div className="flex items-center gap-2 text-sm">
-                  <Clock className="h-4 w-4" />
-                  <span>{nanny.experience_duration} months experience</span>
-                </div>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {nanny.experience_type === 'both' ? 'Nanny & Cleaning' : 
-                   nanny.experience_type === 'nanny' ? 'Nanny' : 'Cleaning'}
+              {/* Bio */}
+              {nanny.bio && (
+                <p className="text-sm text-muted-foreground mt-3 line-clamp-2">
+                  {nanny.bio}
                 </p>
-              </div>
+              )}
 
               {/* Languages */}
-              <div>
+              <div className="mt-3">
                 <p className="text-sm font-medium mb-1">Languages:</p>
                 <div className="flex flex-wrap gap-1">
                   {nanny.languages.slice(0, 3).map((lang, index) => (
-                    <Badge key={index} variant="secondary" className="text-xs">
+                    <Badge key={index} variant="outline" className="text-xs">
                       {lang}
                     </Badge>
                   ))}
                   {nanny.languages.length > 3 && (
-                    <Badge variant="secondary" className="text-xs">
+                    <Badge variant="outline" className="text-xs">
                       +{nanny.languages.length - 3} more
                     </Badge>
                   )}
                 </div>
               </div>
 
-              {/* Introduction Video */}
-              {nanny.interview_video_url && (
-                <div>
-                  <p className="text-sm font-medium mb-2">Introduction Video:</p>
-                  <video 
-                    src={`https://oqdqadcobqpzpveawzni.supabase.co/storage/v1/object/public/interview-videos/${nanny.interview_video_url}`}
-                    controls
-                    className="w-full h-32 rounded-md object-cover"
-                  />
-                </div>
-              )}
-
-              {/* Bio */}
-              {nanny.bio && (
-                <p className="text-sm text-muted-foreground line-clamp-3">
-                  {nanny.bio}
-                </p>
-              )}
-
-              {/* Express Interest Button */}
-              {user && userRole === 'client' && (
-                <Dialog>
-                  <DialogTrigger asChild>
-                    <Button 
-                      className="w-full" 
-                      onClick={() => setSelectedNanny(nanny)}
-                    >
-                      <MessageCircle className="h-4 w-4 mr-2" />
-                      Express Interest
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Express Interest</DialogTitle>
-                      <DialogDescription>
-                        Send a message to {nanny.profiles.first_name} expressing your interest. 
-                        To get their contact details, you'll need to pay R500 after they respond.
-                      </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4">
-                      <div>
-                        <Label htmlFor="message">Your Message</Label>
-                        <Textarea
-                          id="message"
-                          placeholder="Tell the nanny about your family and childcare needs..."
-                          value={interestMessage}
-                          onChange={(e) => setInterestMessage(e.target.value)}
-                          rows={4}
-                        />
-                      </div>
-                      <div className="flex gap-2">
-                        <Button 
-                          onClick={handleExpressInterest}
-                          disabled={sendingInterest || !interestMessage.trim()}
-                          className="flex-1"
-                        >
-                          {sendingInterest ? 'Sending...' : 'Send Interest'}
-                        </Button>
-                        <Button 
-                          variant="outline" 
-                          onClick={() => setSelectedNanny(null)}
-                          className="flex-1"
-                        >
-                          Cancel
-                        </Button>
-                      </div>
-                    </div>
-                  </DialogContent>
-                </Dialog>
-              )}
-
-              {!user && (
-                <Button className="w-full" asChild>
-                  <a href="/auth">Sign In to Contact</a>
+              <div className="flex gap-2 mt-4">
+                <Button 
+                  variant="outline"
+                  onClick={() => setSelectedNanny(nanny)}
+                >
+                  View Profile
                 </Button>
-              )}
+                {user && hasRole && (
+                  <Button 
+                    className="flex-1"
+                    onClick={() => setSelectedNanny(nanny)}
+                    disabled={!canExpressInterest(nanny.id)}
+                  >
+                    {canExpressInterest(nanny.id) ? 'Express Interest' : 'Interest Already Sent'}
+                  </Button>
+                )}
+              </div>
             </CardContent>
           </Card>
         ))}
@@ -426,6 +427,152 @@ export default function FindNanny() {
           </p>
         </div>
       )}
+
+      {/* Nanny Profile Dialog */}
+      <Dialog open={!!selectedNanny} onOpenChange={() => setSelectedNanny(null)}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Nanny Profile - {selectedNanny?.profiles.first_name}</DialogTitle>
+            <DialogDescription>
+              Detailed profile information
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedNanny && (
+            <div className="space-y-6">
+              {/* Profile Header */}
+              <div className="flex items-start gap-4">
+                {selectedNanny.profiles.profile_picture_url && (
+                  <img
+                    src={selectedNanny.profiles.profile_picture_url}
+                    alt="Profile"
+                    className="w-24 h-24 rounded-full object-cover"
+                  />
+                )}
+                <div className="flex-1">
+                  <h3 className="text-2xl font-bold">{selectedNanny.profiles.first_name}</h3>
+                  <p className="text-muted-foreground">{selectedNanny.profiles.city}, {selectedNanny.profiles.suburb}</p>
+                  <p className="text-xl font-semibold text-primary mt-2">R{selectedNanny.hourly_rate}/hour</p>
+                  
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    {selectedNanny.academy_completed && (
+                      <Badge variant="secondary">Academy Complete</Badge>
+                    )}
+                    {selectedNanny.criminal_check_status === 'approved' && (
+                      <Badge variant="default">Criminal Check ✓</Badge>
+                    )}
+                    {selectedNanny.credit_check_status === 'approved' && (
+                      <Badge variant="default">Credit Check ✓</Badge>
+                    )}
+                    {selectedNanny.profile_approved && (
+                      <Badge variant="default">Profile Verified</Badge>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Bio */}
+              {selectedNanny.bio && (
+                <div>
+                  <h4 className="font-semibold mb-2">About Me</h4>
+                  <p className="text-muted-foreground">{selectedNanny.bio}</p>
+                </div>
+              )}
+
+              {/* Experience & Details */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <h4 className="font-semibold mb-2">Experience</h4>
+                  <p className="capitalize">{selectedNanny.experience_type}</p>
+                  {selectedNanny.experience_duration && (
+                    <p className="text-sm text-muted-foreground">{selectedNanny.experience_duration} years</p>
+                  )}
+                </div>
+                
+                {selectedNanny.education_level && (
+                  <div>
+                    <h4 className="font-semibold mb-2">Education</h4>
+                    <p className="capitalize">{selectedNanny.education_level}</p>
+                  </div>
+                )}
+                
+                {selectedNanny.languages.length > 0 && (
+                  <div>
+                    <h4 className="font-semibold mb-2">Languages</h4>
+                    <p>{selectedNanny.languages.join(', ')}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Training Certifications */}
+              <div>
+                <h4 className="font-semibold mb-2">Training & Certifications</h4>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className={`flex items-center gap-2 ${selectedNanny.training_first_aid ? 'text-green-600' : 'text-muted-foreground'}`}>
+                    {selectedNanny.training_first_aid ? <CheckCircle className="h-4 w-4" /> : <X className="h-4 w-4" />}
+                    First Aid
+                  </div>
+                  <div className={`flex items-center gap-2 ${selectedNanny.training_cpr ? 'text-green-600' : 'text-muted-foreground'}`}>
+                    {selectedNanny.training_cpr ? <CheckCircle className="h-4 w-4" /> : <X className="h-4 w-4" />}
+                    CPR
+                  </div>
+                  <div className={`flex items-center gap-2 ${selectedNanny.training_nanny ? 'text-green-600' : 'text-muted-foreground'}`}>
+                    {selectedNanny.training_nanny ? <CheckCircle className="h-4 w-4" /> : <X className="h-4 w-4" />}
+                    Nanny Training
+                  </div>
+                  <div className={`flex items-center gap-2 ${selectedNanny.training_child_development ? 'text-green-600' : 'text-muted-foreground'}`}>
+                    {selectedNanny.training_child_development ? <CheckCircle className="h-4 w-4" /> : <X className="h-4 w-4" />}
+                    Child Development
+                  </div>
+                </div>
+              </div>
+
+              {/* Interview Video */}
+              {selectedNanny.interview_video_url && (
+                <div>
+                  <h4 className="font-semibold mb-2">Introduction Video</h4>
+                  <video
+                    controls
+                    className="w-full max-w-md rounded-lg"
+                    src={selectedNanny.interview_video_url}
+                  >
+                    Your browser does not support the video tag.
+                  </video>
+                </div>
+              )}
+
+              {/* Express Interest Section */}
+              {user && hasRole && (
+                <div className="border-t pt-4">
+                  <h4 className="font-semibold mb-2">Express Interest</h4>
+                  <div className="space-y-3">
+                    <textarea
+                      className="w-full p-3 border rounded-md resize-none"
+                      rows={3}
+                      value={interestMessage}
+                      onChange={(e) => setInterestMessage(e.target.value)}
+                      placeholder="Tell the nanny about your family and what you're looking for..."
+                    />
+                    <Button 
+                      onClick={handleExpressInterest} 
+                      disabled={sendingInterest || !interestMessage.trim() || !canExpressInterest(selectedNanny.id)}
+                      className="w-full"
+                    >
+                      {sendingInterest ? 'Sending...' : canExpressInterest(selectedNanny.id) ? 'Send Interest' : 'Interest Already Sent'}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSelectedNanny(null)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Shield, Users, Video, FileCheck, CreditCard, CheckCircle, X, Upload, Edit, Heart } from 'lucide-react';
+import { Shield, Users, Video, FileCheck, CreditCard, CheckCircle, X, Upload, Edit, Heart, Eye } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import InterestManagement from '@/components/InterestManagement';
 
@@ -608,6 +608,16 @@ export default function AdminPanel() {
                       {nanny.criminal_check_url && nanny.criminal_check_status === 'pending' && (
                         <div className="space-y-2">
                           <p className="text-sm font-medium">Criminal Check</p>
+                          <div className="flex gap-2 mb-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => window.open(nanny.criminal_check_url, '_blank')}
+                            >
+                              <Eye className="h-4 w-4 mr-1" />
+                              View Document
+                            </Button>
+                          </div>
                           <div className="flex gap-2">
                             <Button
                               size="sm"
@@ -632,6 +642,16 @@ export default function AdminPanel() {
                       {nanny.credit_check_url && nanny.credit_check_status === 'pending' && (
                         <div className="space-y-2">
                           <p className="text-sm font-medium">Credit Check</p>
+                          <div className="flex gap-2 mb-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => window.open(nanny.credit_check_url, '_blank')}
+                            >
+                              <Eye className="h-4 w-4 mr-1" />
+                              View Document
+                            </Button>
+                          </div>
                           <div className="flex gap-2">
                             <Button
                               size="sm"

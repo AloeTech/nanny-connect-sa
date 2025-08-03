@@ -108,18 +108,27 @@ export default function NannyDashboard() {
       });
 
       // Fetch interests in this nanny
-      const { data: interestsData } = await supabase
-        .from('interests')
-        .select(`
-          *,
-          clients!inner(
-            profiles!inner(first_name, last_name, email)
-          )
-        `)
-        .eq('nanny_id', nanny?.id)
-        .order('created_at', { ascending: false });
+      if (nanny?.id) {
+        const { data: interestsData, error: interestsError } = await supabase
+          .from('interests')
+          .select(`
+            *,
+            clients!inner(
+              id,
+              user_id,
+              profiles!inner(first_name, last_name, email)
+            )
+          `)
+          .eq('nanny_id', nanny.id)
+          .order('created_at', { ascending: false });
 
-      setInterests(interestsData || []);
+        if (interestsError) {
+          console.error('Error fetching interests:', interestsError);
+        } else {
+          console.log('Fetched interests for nanny:', interestsData);
+          setInterests(interestsData || []);
+        }
+      }
 
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -148,30 +157,34 @@ export default function NannyDashboard() {
 
       if (uploadError) throw uploadError;
 
+      // Get the public URL for the uploaded file
+      const { data: urlData } = supabase.storage.from(bucketName).getPublicUrl(fileName);
+      const fileUrl = urlData.publicUrl;
+
       // Update appropriate table with file URL
       if (type === 'profile_picture') {
         const { error: updateError } = await supabase
           .from('profiles')
-          .update({ profile_picture_url: fileName })
+          .update({ profile_picture_url: fileUrl })
           .eq('id', user?.id);
         
         if (updateError) throw updateError;
         
         // Update local state
         if (userProfile) {
-          setUserProfile({ ...userProfile, profile_picture_url: fileName });
+          setUserProfile({ ...userProfile, profile_picture_url: fileUrl });
         }
       } else {
         const updateData: any = {};
         
         if (type === 'criminal_check') {
-          updateData.criminal_check_url = fileName;
+          updateData.criminal_check_url = fileUrl;
           updateData.criminal_check_status = 'pending';
         } else if (type === 'credit_check') {
-          updateData.credit_check_url = fileName;
+          updateData.credit_check_url = fileUrl;
           updateData.credit_check_status = 'pending';
         } else if (type === 'interview_video' || type === 'intro_video') {
-          updateData.interview_video_url = fileName;
+          updateData.interview_video_url = fileUrl;
         }
 
         const { error: updateError } = await supabase

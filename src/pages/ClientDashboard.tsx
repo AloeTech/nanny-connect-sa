@@ -30,12 +30,12 @@ interface UserProfile {
 interface Interest {
   id: string;
   message: string;
-  status: string;
   nanny_response: string;
   payment_status: string;
   admin_approved: boolean;
   created_at: string;
   nanny_id: string;
+  client_id: string;
   nannies: {
     user_id: string;
     bio: string;
@@ -126,7 +126,14 @@ export default function ClientDashboard() {
         .order('created_at', { ascending: false });
 
       if (clientInterests) {
-        setInterests(clientInterests);
+        // Ensure all required fields exist with defaults
+        const processedInterests = clientInterests.map((interest: any) => ({
+          ...interest,
+          nanny_response: interest.nanny_response || 'pending',
+          payment_status: interest.payment_status || 'pending',
+          admin_approved: interest.admin_approved || false
+        }));
+        setInterests(processedInterests);
       }
 
       // Fetch payments
@@ -241,7 +248,7 @@ export default function ClientDashboard() {
                 <div className="flex items-center gap-2">
                   <Calendar className="h-5 w-5 text-blue-500" />
                   <div>
-                    <p className="text-2xl font-bold">{interests.filter(i => i.status === 'accepted').length}</p>
+                    <p className="text-2xl font-bold">{interests.filter(i => i.admin_approved).length}</p>
                     <p className="text-sm text-muted-foreground">Interviews Scheduled</p>
                   </div>
                 </div>

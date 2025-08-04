@@ -159,7 +159,7 @@ export default function Home() {
               </CardHeader>
               <CardContent>
                 <p className="text-muted-foreground">
-                  Comprehensive training program covering childcare, safety, and professional standards
+                  Comprehensive training program covering childcare, safety, and foundational standards
                 </p>
               </CardContent>
             </Card>

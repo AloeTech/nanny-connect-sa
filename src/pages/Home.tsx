@@ -17,7 +17,7 @@ export default function Home() {
     {
       icon: Video,
       title: "Nanny Academy",
-      description: "Professional training program ensuring quality childcare"
+      description: "Foundational training program ensuring quality childcare"
     },
     {
       icon: Users,

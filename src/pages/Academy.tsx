@@ -179,7 +179,7 @@ export default function Academy() {
           <BookOpen className="h-8 w-8" />
           Nanny Academy
         </h1>
-        <p className="text-muted-foreground">Professional training for certified nannies</p>
+        <p className="text-muted-foreground">Foundational training for certified nannies</p>
       </div>
 
       {userRole === 'nanny' && (

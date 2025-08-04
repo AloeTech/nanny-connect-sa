@@ -202,7 +202,7 @@ export default function About() {
                 </div>
                 <div className="flex flex-col items-center">
                   <CheckCircle className="w-12 h-12 text-primary mb-4" />
-                  <h4 className="font-semibold text-foreground mb-2">Professional Training</h4>
+                  <h4 className="font-semibold text-foreground mb-2">Foundational Training</h4>
                   <p className="text-muted-foreground text-center">
                     Academy-trained nannies with essential childcare and safety skills
                   </p>

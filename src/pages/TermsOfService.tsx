@@ -47,7 +47,7 @@ export default function TermsOfService() {
               </p>
               <ul className="list-disc pl-6 text-muted-foreground space-y-2">
                 <li>Nanny profile verification and background checks</li>
-                <li>Professional training through our Nanny Academy</li>
+                <li>Foundational training through our Nanny Academy</li>
                 <li>Matching services between families and nannies</li>
                 <li>Payment processing for placement fees</li>
                 <li>Ongoing support and mediation services</li>

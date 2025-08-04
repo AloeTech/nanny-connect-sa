@@ -199,7 +199,7 @@ export default function NannyRegistrationForm({ userId, onComplete }: Props) {
                   checked={formData.training_nanny}
                   onCheckedChange={(checked) => setFormData(prev => ({ ...prev, training_nanny: !!checked }))}
                 />
-                <Label htmlFor="nanny_training">Professional Nanny Training</Label>
+                <Label htmlFor="nanny_training">Foundational Nanny Training</Label>
               </div>
               <div className="flex items-center space-x-2">
                 <Checkbox

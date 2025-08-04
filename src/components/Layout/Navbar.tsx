@@ -42,12 +42,6 @@ export default function Navbar() {
           <Link to="/register-nanny">
             <Button variant="ghost">Become a Nanny</Button>
           </Link>
-          <Link to="/academy">
-            <Button variant="ghost" className="gap-2">
-              <Video className="h-4 w-4" />
-              Academy
-            </Button>
-          </Link>
           <Link to="/about">
             <Button variant="ghost">About</Button>
           </Link>
@@ -206,21 +200,21 @@ export default function Navbar() {
                           Dashboard
                         </Button>
                       </Link>
-                       <Link to="/profile">
-                         <Button variant="outline" className="w-full">
-                           Profile Settings
-                         </Button>
-                       </Link>
-                       <Link to="/about">
-                         <Button variant="outline" className="w-full">
-                           About
-                         </Button>
-                       </Link>
-                       <Link to="/terms">
-                         <Button variant="outline" className="w-full">
-                           Terms of Service
-                         </Button>
-                       </Link>
+                      <Link to="/profile">
+                        <Button variant="outline" className="w-full">
+                          Profile Settings
+                        </Button>
+                      </Link>
+                      <Link to="/about">
+                        <Button variant="outline" className="w-full">
+                          About
+                        </Button>
+                      </Link>
+                      <Link to="/terms">
+                        <Button variant="outline" className="w-full">
+                          Terms of Service
+                        </Button>
+                      </Link>
                       <Button
                         onClick={handleSignOut}
                         variant="destructive"

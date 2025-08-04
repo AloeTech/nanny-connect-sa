@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Shield, Users, Video, FileCheck, CreditCard, CheckCircle, X, Upload, Edit, Heart, Eye } from 'lucide-react';
+import { Shield, Users, Video, FileCheck, CreditCard, CheckCircle, X, Upload, Edit, Heart, Eye, Trash2, Plus } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import InterestManagement from '@/components/InterestManagement';
 
@@ -24,6 +24,10 @@ interface NannyProfile {
   criminal_check_url: string;
   credit_check_url: string;
   interview_video_url: string;
+  training_first_aid: boolean;
+  training_nanny: boolean;
+  training_cpr: boolean;
+  training_child_development: boolean;
   profiles: {
     first_name: string;
     last_name: string;
@@ -48,10 +52,11 @@ interface Payment {
   amount: number;
   status: string;
   created_at: string;
-  payment_method: string;
-  transaction_id: string;
-  client_id: string;
-  nanny_id: string;
+  profiles: {
+    first_name: string;
+    last_name: string;
+    email: string;
+  };
 }
 
 export default function AdminPanel() {
@@ -83,39 +88,41 @@ export default function AdminPanel() {
         .from('nannies')
         .select(`
           *,
-          profiles (
-            first_name,
-            last_name,
-            email,
-            city,
-            suburb
-          )
+          profiles!inner(first_name, last_name, email, city, suburb)
         `)
         .order('created_at', { ascending: false });
 
-      if (nanniesData) {
-        setNannies(nanniesData);
-      }
+      setNannies(nanniesData || []);
 
       // Fetch academy videos
       const { data: videosData } = await supabase
         .from('academy_videos')
         .select('*')
-        .order('order_index', { ascending: true });
+        .order('order_index');
 
-      if (videosData) {
-        setAcademyVideos(videosData);
-      }
+      setAcademyVideos(videosData || []);
 
-      // Fetch payments
+      // Fetch payments with client profiles
       const { data: paymentsData } = await supabase
         .from('payments')
-        .select('*')
+        .select(`
+          *,
+          clients!inner(
+            profiles!inner(first_name, last_name, email)
+          )
+        `)
         .order('created_at', { ascending: false });
 
-      if (paymentsData) {
-        setPayments(paymentsData);
-      }
+      // Transform data to match Payment interface
+      const transformedPayments = paymentsData?.map(payment => ({
+        id: payment.id,
+        amount: payment.amount,
+        status: payment.status,
+        created_at: payment.created_at,
+        profiles: payment.clients.profiles
+      })) || [];
+
+      setPayments(transformedPayments);
 
       // Fetch interests
       const { data: interestsData } = await supabase
@@ -123,18 +130,17 @@ export default function AdminPanel() {
         .select(`
           *,
           clients!inner(
+            id,
             profiles!inner(first_name, last_name, email)
           ),
           nannies!inner(
-            profiles!inner(first_name, last_name),
-            hourly_rate
+            id,
+            profiles!inner(first_name, last_name)
           )
         `)
         .order('created_at', { ascending: false });
 
-      if (interestsData) {
-        setInterests(interestsData);
-      }
+      setInterests(interestsData || []);
 
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -163,7 +169,7 @@ export default function AdminPanel() {
 
       toast({
         title: "Success",
-        description: `Document ${status}`,
+        description: `Document ${status} successfully`,
       });
     } catch (error: any) {
       toast({
@@ -189,7 +195,33 @@ export default function AdminPanel() {
 
       toast({
         title: "Success",
-        description: `Profile ${approved ? 'approved' : 'rejected'}`,
+        description: `Profile ${approved ? 'approved' : 'rejected'} successfully`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  };
+
+  const toggleTrainingBadge = async (nannyId: string, trainingType: string, currentValue: boolean) => {
+    try {
+      const { error } = await supabase
+        .from('nannies')
+        .update({ [trainingType]: !currentValue })
+        .eq('id', nannyId);
+
+      if (error) throw error;
+
+      setNannies(nannies.map(nanny => 
+        nanny.id === nannyId ? { ...nanny, [trainingType]: !currentValue } : nanny
+      ));
+
+      toast({
+        title: "Success",
+        description: `Badge ${!currentValue ? 'assigned' : 'revoked'} successfully`,
       });
     } catch (error: any) {
       toast({
@@ -303,19 +335,6 @@ export default function AdminPanel() {
     );
   }
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'approved':
-        return <Badge variant="default" className="bg-green-500">Approved</Badge>;
-      case 'pending':
-        return <Badge variant="secondary">Pending</Badge>;
-      case 'rejected':
-        return <Badge variant="destructive">Rejected</Badge>;
-      default:
-        return <Badge variant="outline">Unknown</Badge>;
-    }
-  };
-
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-8">
@@ -323,128 +342,189 @@ export default function AdminPanel() {
           <Shield className="h-8 w-8" />
           Admin Panel
         </h1>
-        <p className="text-muted-foreground">Manage nannies, academy content, and platform operations</p>
+        <p className="text-muted-foreground">Manage nannies, content, and platform operations</p>
       </div>
 
       <Tabs defaultValue="nannies" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="nannies" className="flex items-center gap-2">
-            <Users className="h-4 w-4" />
-            Nannies
-          </TabsTrigger>
-          <TabsTrigger value="interests" className="flex items-center gap-2">
-            <Heart className="h-4 w-4" />
-            Interests
-          </TabsTrigger>
-          <TabsTrigger value="academy" className="flex items-center gap-2">
-            <Video className="h-4 w-4" />
-            Academy
-          </TabsTrigger>
-          <TabsTrigger value="documents" className="flex items-center gap-2">
-            <FileCheck className="h-4 w-4" />
-            Documents
-          </TabsTrigger>
-          <TabsTrigger value="payments" className="flex items-center gap-2">
-            <CreditCard className="h-4 w-4" />
-            Payments
-          </TabsTrigger>
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="nannies">Nannies</TabsTrigger>
+          <TabsTrigger value="interests">Interests</TabsTrigger>
+          <TabsTrigger value="academy">Academy</TabsTrigger>
+          <TabsTrigger value="payments">Payments</TabsTrigger>
         </TabsList>
 
         <TabsContent value="nannies" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Nanny Profiles</CardTitle>
-              <CardDescription>Review and approve nanny registrations</CardDescription>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5" />
+                Nanny Management
+              </CardTitle>
+              <CardDescription>Review and approve nanny profiles</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
+              <div className="space-y-6">
                 {nannies.map((nanny) => (
-                  <div key={nanny.id} className="border rounded-lg p-4">
-                    <div className="flex justify-between items-start mb-4">
-                      <div>
-                        <h4 className="font-semibold">
+                  <Card key={nanny.id} className="p-4">
+                    <div className="flex justify-between items-start">
+                      <div className="space-y-2">
+                        <h3 className="font-semibold">
                           {nanny.profiles.first_name} {nanny.profiles.last_name}
-                        </h4>
+                        </h3>
                         <p className="text-sm text-muted-foreground">{nanny.profiles.email}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {nanny.profiles.suburb}, {nanny.profiles.city}
-                        </p>
+                        <p className="text-sm">{nanny.profiles.suburb}, {nanny.profiles.city}</p>
+                        
+                        {/* Document Status */}
+                        <div className="grid grid-cols-2 gap-4 mt-3">
+                          <div>
+                            <span className="text-sm text-muted-foreground">Criminal Check:</span>
+                            <div className="flex items-center gap-2">
+                              {nanny.criminal_check_status === 'approved' ? (
+                                <Badge variant="default" className="bg-green-500">Approved</Badge>
+                              ) : nanny.criminal_check_status === 'pending' ? (
+                                <Badge variant="secondary">Pending</Badge>
+                              ) : (
+                                <Badge variant="secondary">Not Uploaded</Badge>
+                              )}
+                              {nanny.criminal_check_url && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => window.open(nanny.criminal_check_url, '_blank')}
+                                >
+                                  <Eye className="h-3 w-3" />
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                          <div>
+                            <span className="text-sm text-muted-foreground">Credit Check:</span>
+                            <div className="flex items-center gap-2">
+                              {nanny.credit_check_status === 'approved' ? (
+                                <Badge variant="default" className="bg-green-500">Approved</Badge>
+                              ) : nanny.credit_check_status === 'pending' ? (
+                                <Badge variant="secondary">Pending</Badge>
+                              ) : (
+                                <Badge variant="secondary">Not Uploaded</Badge>
+                              )}
+                              {nanny.credit_check_url && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => window.open(nanny.credit_check_url, '_blank')}
+                                >
+                                  <Eye className="h-3 w-3" />
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                          <div>
+                            <span className="text-sm text-muted-foreground">Academy:</span>
+                            <div>
+                              {nanny.academy_completed ? (
+                                <Badge variant="default" className="bg-green-500">Complete</Badge>
+                              ) : (
+                                <Badge variant="secondary">Incomplete</Badge>
+                              )}
+                            </div>
+                          </div>
+                          <div>
+                            <span className="text-sm text-muted-foreground">Profile:</span>
+                            <div>
+                              {nanny.profile_approved ? (
+                                <Badge variant="default" className="bg-green-500">Approved</Badge>
+                              ) : (
+                                <Badge variant="secondary">Pending</Badge>
+                              )}
+                            </div>
+                          </div>
+                          {nanny.interview_video_url && (
+                            <div>
+                              <span className="text-sm text-muted-foreground">Interview Video:</span>
+                              <div>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => window.open(nanny.interview_video_url, '_blank')}
+                                >
+                                  <Video className="h-3 w-3 mr-1" />
+                                  View Video
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Training Badges */}
+                        <div>
+                          <span className="text-sm text-muted-foreground">Training Badges:</span>
+                          <div className="flex gap-2 mt-1 flex-wrap">
+                            <Button
+                              size="sm"
+                              variant={nanny.training_first_aid ? "default" : "outline"}
+                              onClick={() => toggleTrainingBadge(nanny.id, 'training_first_aid', nanny.training_first_aid)}
+                            >
+                              First Aid {nanny.training_first_aid ? '✓' : ''}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant={nanny.training_cpr ? "default" : "outline"}
+                              onClick={() => toggleTrainingBadge(nanny.id, 'training_cpr', nanny.training_cpr)}
+                            >
+                              CPR {nanny.training_cpr ? '✓' : ''}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant={nanny.training_nanny ? "default" : "outline"}
+                              onClick={() => toggleTrainingBadge(nanny.id, 'training_nanny', nanny.training_nanny)}
+                            >
+                              Nanny Training {nanny.training_nanny ? '✓' : ''}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant={nanny.training_child_development ? "default" : "outline"}
+                              onClick={() => toggleTrainingBadge(nanny.id, 'training_child_development', nanny.training_child_development)}
+                            >
+                              Child Dev {nanny.training_child_development ? '✓' : ''}
+                            </Button>
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        {nanny.profile_approved ? (
-                          <Badge variant="default" className="bg-green-500">
-                            <CheckCircle className="h-3 w-3 mr-1" />
-                            Approved
-                          </Badge>
-                        ) : (
-                          <Badge variant="secondary">Pending Approval</Badge>
+
+                      {/* Action Buttons */}
+                      <div className="flex flex-col gap-2">
+                        {nanny.criminal_check_url && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => updateDocumentStatus(nanny.id, 'criminal_check_status', 'approved')}
+                            disabled={nanny.criminal_check_status === 'approved'}
+                          >
+                            <CheckCircle className="h-4 w-4 mr-1" />
+                            Approve Criminal
+                          </Button>
                         )}
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                      <div>
-                        <span className="text-sm text-muted-foreground">Criminal Check:</span>
-                        <div>{getStatusBadge(nanny.criminal_check_status)}</div>
-                      </div>
-                      <div>
-                        <span className="text-sm text-muted-foreground">Credit Check:</span>
-                        <div>{getStatusBadge(nanny.credit_check_status)}</div>
-                      </div>
-                      <div>
-                        <span className="text-sm text-muted-foreground">Academy:</span>
-                        <div>
-                          {nanny.academy_completed ? (
-                            <Badge variant="default" className="bg-green-500">Complete</Badge>
-                          ) : (
-                            <Badge variant="secondary">Incomplete</Badge>
-                          )}
-                        </div>
-                      </div>
-                      <div>
-                        <span className="text-sm text-muted-foreground">Profile:</span>
-                        <div>
-                          {nanny.profile_approved ? (
-                            <Badge variant="default" className="bg-green-500">Approved</Badge>
-                          ) : (
-                            <Badge variant="secondary">Pending</Badge>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        variant="default"
-                        onClick={() => approveProfile(nanny.id, true)}
-                        disabled={nanny.profile_approved}
-                      >
-                        <CheckCircle className="h-4 w-4 mr-1" />
-                        Approve Profile
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => approveProfile(nanny.id, false)}
-                        disabled={!nanny.profile_approved}
-                      >
-                        <X className="h-4 w-4 mr-1" />
-                        Reject Profile
-                      </Button>
-                      {nanny.academy_completed && !nanny.profile_approved && (
+                        {nanny.credit_check_url && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => updateDocumentStatus(nanny.id, 'credit_check_status', 'approved')}
+                            disabled={nanny.credit_check_status === 'approved'}
+                          >
+                            <CheckCircle className="h-4 w-4 mr-1" />
+                            Approve Credit
+                          </Button>
+                        )}
                         <Button
                           size="sm"
-                          variant="outline"
-                          onClick={() => approveProfile(nanny.id, true)}
-                          className="bg-green-50 border-green-200 text-green-700 hover:bg-green-100"
+                          variant={nanny.profile_approved ? "secondary" : "default"}
+                          onClick={() => approveProfile(nanny.id, !nanny.profile_approved)}
                         >
-                          <CheckCircle className="h-4 w-4 mr-1" />
-                          Approve Academy Badge
+                          {nanny.profile_approved ? 'Revoke Profile' : 'Approve Profile'}
                         </Button>
-                      )}
+                      </div>
                     </div>
-                  </div>
+                  </Card>
                 ))}
               </div>
             </CardContent>
@@ -498,7 +578,6 @@ export default function AdminPanel() {
                         id="title"
                         value={newVideo.title}
                         onChange={(e) => setNewVideo({...newVideo, title: e.target.value})}
-                        placeholder="Video title"
                       />
                     </div>
                     <div>
@@ -507,7 +586,6 @@ export default function AdminPanel() {
                         id="description"
                         value={newVideo.description}
                         onChange={(e) => setNewVideo({...newVideo, description: e.target.value})}
-                        placeholder="Video description"
                       />
                     </div>
                     <div>
@@ -516,7 +594,6 @@ export default function AdminPanel() {
                         id="video_url"
                         value={newVideo.video_url}
                         onChange={(e) => setNewVideo({...newVideo, video_url: e.target.value})}
-                        placeholder="https://..."
                       />
                     </div>
                     <div className="grid grid-cols-2 gap-4">
@@ -549,131 +626,39 @@ export default function AdminPanel() {
               {/* Video List */}
               <div className="space-y-4">
                 {academyVideos.map((video) => (
-                  <div key={video.id} className="border rounded-lg p-4">
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <h4 className="font-semibold">{video.title}</h4>
-                        <p className="text-sm text-muted-foreground">{video.description}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {video.duration_minutes} minutes • Order: {video.order_index}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {video.is_active ? (
-                          <Badge variant="default" className="bg-green-500">Active</Badge>
-                        ) : (
-                          <Badge variant="secondary">Inactive</Badge>
-                        )}
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => toggleVideoActive(video.id, video.is_active)}
-                        >
-                          {video.is_active ? 'Deactivate' : 'Activate'}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => deleteAcademyVideo(video.id)}
-                        >
-                          Delete
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="documents" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Document Review</CardTitle>
-              <CardDescription>Approve or reject uploaded documents</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {nannies.filter(nanny => 
-                  nanny.criminal_check_status === 'pending' || 
-                  nanny.credit_check_status === 'pending'
-                ).map((nanny) => (
-                  <div key={nanny.id} className="border rounded-lg p-4">
-                    <h4 className="font-semibold mb-3">
-                      {nanny.profiles.first_name} {nanny.profiles.last_name}
-                    </h4>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {nanny.criminal_check_url && nanny.criminal_check_status === 'pending' && (
-                        <div className="space-y-2">
-                          <p className="text-sm font-medium">Criminal Check</p>
-                          <div className="flex gap-2 mb-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => window.open(nanny.criminal_check_url, '_blank')}
-                            >
-                              <Eye className="h-4 w-4 mr-1" />
-                              View Document
-                            </Button>
-                          </div>
-                          <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              variant="default"
-                              onClick={() => updateDocumentStatus(nanny.id, 'criminal_check_status', 'approved')}
-                            >
-                              <CheckCircle className="h-4 w-4 mr-1" />
-                              Approve
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => updateDocumentStatus(nanny.id, 'criminal_check_status', 'rejected')}
-                            >
-                              <X className="h-4 w-4 mr-1" />
-                              Reject
-                            </Button>
+                  <Card key={video.id}>
+                    <CardContent className="p-4">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h3 className="font-semibold">{video.title}</h3>
+                          <p className="text-sm text-muted-foreground">{video.description}</p>
+                          <div className="flex items-center gap-4 mt-2 text-sm">
+                            <span>Duration: {video.duration_minutes} min</span>
+                            <span>Order: {video.order_index}</span>
+                            <Badge variant={video.is_active ? "default" : "secondary"}>
+                              {video.is_active ? "Active" : "Inactive"}
+                            </Badge>
                           </div>
                         </div>
-                      )}
-                      
-                      {nanny.credit_check_url && nanny.credit_check_status === 'pending' && (
-                        <div className="space-y-2">
-                          <p className="text-sm font-medium">Credit Check</p>
-                          <div className="flex gap-2 mb-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => window.open(nanny.credit_check_url, '_blank')}
-                            >
-                              <Eye className="h-4 w-4 mr-1" />
-                              View Document
-                            </Button>
-                          </div>
-                          <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              variant="default"
-                              onClick={() => updateDocumentStatus(nanny.id, 'credit_check_status', 'approved')}
-                            >
-                              <CheckCircle className="h-4 w-4 mr-1" />
-                              Approve
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => updateDocumentStatus(nanny.id, 'credit_check_status', 'rejected')}
-                            >
-                              <X className="h-4 w-4 mr-1" />
-                              Reject
-                            </Button>
-                          </div>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => toggleVideoActive(video.id, video.is_active)}
+                          >
+                            {video.is_active ? "Deactivate" : "Activate"}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => deleteAcademyVideo(video.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </div>
-                      )}
-                    </div>
-                  </div>
+                      </div>
+                    </CardContent>
+                  </Card>
                 ))}
               </div>
             </CardContent>
@@ -683,35 +668,26 @@ export default function AdminPanel() {
         <TabsContent value="payments" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Payment Management</CardTitle>
-              <CardDescription>Monitor and manage platform payments</CardDescription>
+              <CardTitle className="flex items-center gap-2">
+                <CreditCard className="h-5 w-5" />
+                Payment History
+              </CardTitle>
+              <CardDescription>Monitor payment transactions</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
                 {payments.map((payment) => (
-                  <div key={payment.id} className="border rounded-lg p-4">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <p className="font-semibold">R{payment.amount}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {new Date(payment.created_at).toLocaleString()}
-                        </p>
-                        {payment.payment_method && (
-                          <p className="text-xs text-muted-foreground">via {payment.payment_method}</p>
-                        )}
-                        {payment.transaction_id && (
-                          <p className="text-xs text-muted-foreground">ID: {payment.transaction_id}</p>
-                        )}
-                      </div>
-                      <div>
-                        {payment.status === 'completed' ? (
-                          <Badge variant="default" className="bg-green-500">Completed</Badge>
-                        ) : payment.status === 'pending' ? (
-                          <Badge variant="secondary">Pending</Badge>
-                        ) : (
-                          <Badge variant="destructive">Failed</Badge>
-                        )}
-                      </div>
+                  <div key={payment.id} className="flex justify-between items-center p-4 border rounded-lg">
+                    <div>
+                      <p className="font-medium">{payment.profiles.first_name} {payment.profiles.last_name}</p>
+                      <p className="text-sm text-muted-foreground">{payment.profiles.email}</p>
+                      <p className="text-sm">{new Date(payment.created_at).toLocaleDateString()}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold">R{payment.amount}</p>
+                      <Badge variant={payment.status === 'completed' ? 'default' : 'secondary'}>
+                        {payment.status}
+                      </Badge>
                     </div>
                   </div>
                 ))}

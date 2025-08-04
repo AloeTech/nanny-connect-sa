@@ -145,17 +145,22 @@ export default function NannyDashboard() {
   const handleFileUpload = async (file: File, type: 'criminal_check' | 'credit_check' | 'interview_video' | 'profile_picture' | 'intro_video') => {
     try {
       const fileExt = file.name.split('.').pop();
-      const fileName = `${user?.id}-${type}-${Date.now()}.${fileExt}`;
+      const fileName = `${user?.id}/${type}-${Date.now()}.${fileExt}`;
       
       const bucketName = type === 'criminal_check' ? 'criminal-checks' : 
                         type === 'credit_check' ? 'credit-checks' : 
                         type === 'profile_picture' ? 'profile-pictures' : 'interview-videos';
       
+      console.log('Uploading file:', fileName, 'to bucket:', bucketName);
+      
       const { error: uploadError } = await supabase.storage
         .from(bucketName)
         .upload(fileName, file);
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.error('Upload error:', uploadError);
+        throw uploadError;
+      }
 
       // Get the public URL for the uploaded file
       const { data: urlData } = supabase.storage.from(bucketName).getPublicUrl(fileName);
@@ -409,7 +414,7 @@ export default function NannyDashboard() {
                   </Button>
                 </div>
               )}
-              {!nannyProfile?.interview_video_url && (
+              {!nannyProfile?.interview_video_url ? (
                 <div>
                   <input
                     type="file"
@@ -429,6 +434,17 @@ export default function NannyDashboard() {
                     <Video className="h-4 w-4 mr-2" />
                     Upload Introduction Video
                   </Button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <span className="text-sm font-medium">Introduction Video Uploaded</span>
+                  <video 
+                    controls 
+                    className="w-full max-h-32 rounded"
+                    src={nannyProfile.interview_video_url}
+                  >
+                    Your browser does not support the video tag.
+                  </video>
                 </div>
               )}
               {!nannyProfile?.criminal_check_url && (

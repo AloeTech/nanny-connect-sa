@@ -111,27 +111,36 @@ export type Database = {
       }
       interests: {
         Row: {
+          admin_approved: boolean | null
           client_id: string
           created_at: string
           id: string
           message: string | null
           nanny_id: string
+          nanny_response: string | null
+          payment_status: string | null
           status: string | null
         }
         Insert: {
+          admin_approved?: boolean | null
           client_id: string
           created_at?: string
           id?: string
           message?: string | null
           nanny_id: string
+          nanny_response?: string | null
+          payment_status?: string | null
           status?: string | null
         }
         Update: {
+          admin_approved?: boolean | null
           client_id?: string
           created_at?: string
           id?: string
           message?: string | null
           nanny_id?: string
+          nanny_response?: string | null
+          payment_status?: string | null
           status?: string | null
         }
         Relationships: [
@@ -414,11 +423,19 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      approve_nanny_profile: {
+        Args: { nanny_user_id: string }
+        Returns: boolean
+      }
       assign_user_role: {
         Args: {
           _user_id: string
           _role: Database["public"]["Enums"]["user_role"]
         }
+        Returns: boolean
+      }
+      can_express_interest: {
+        Args: { p_client_id: string; p_nanny_id: string }
         Returns: boolean
       }
       has_role: {

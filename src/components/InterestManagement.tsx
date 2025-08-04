@@ -204,27 +204,51 @@ export default function InterestManagement({ interests, userRole, onInterestUpda
             )}
 
             {/* Admin Actions */}
-            {userRole === 'admin' && 
-             interest.payment_status === 'completed' && 
-             !interest.admin_approved && (
-              <div className="flex gap-2">
-                <Button
-                  onClick={() => handleAdminApproval(interest.id, true)}
-                  disabled={processing === interest.id}
-                  className="bg-green-600 hover:bg-green-700"
-                >
-                  <CheckCircle className="h-4 w-4 mr-2" />
-                  Approve Payment & Send Details
-                </Button>
-                <Button
-                  variant="destructive"
-                  onClick={() => handleAdminApproval(interest.id, false)}
-                  disabled={processing === interest.id}
-                >
-                  <XCircle className="h-4 w-4 mr-2" />
-                  Reject Payment
-                </Button>
-              </div>
+            {userRole === 'admin' && (
+              <>
+                {interest.payment_status === 'completed' && !interest.admin_approved && (
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() => handleAdminApproval(interest.id, true)}
+                      disabled={processing === interest.id}
+                      className="bg-green-600 hover:bg-green-700"
+                    >
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                      Approve Payment & Send Details
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      onClick={() => handleAdminApproval(interest.id, false)}
+                      disabled={processing === interest.id}
+                    >
+                      <XCircle className="h-4 w-4 mr-2" />
+                      Reject Payment
+                    </Button>
+                  </div>
+                )}
+                {interest.nanny_response === 'pending' && (
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() => handleNannyResponse(interest.id, 'approved')}
+                      disabled={processing === interest.id}
+                      variant="secondary"
+                      size="sm"
+                    >
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                      Admin Approve on Behalf
+                    </Button>
+                    <Button
+                      onClick={() => handleNannyResponse(interest.id, 'declined')}
+                      disabled={processing === interest.id}
+                      variant="outline"
+                      size="sm"
+                    >
+                      <XCircle className="h-4 w-4 mr-2" />
+                      Admin Decline on Behalf
+                    </Button>
+                  </div>
+                )}
+              </>
             )}
 
             {/* Status Messages */}

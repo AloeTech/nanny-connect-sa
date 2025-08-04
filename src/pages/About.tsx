@@ -14,7 +14,7 @@ export default function About() {
           </h1>
           <p className="text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
             Connecting South African families with trusted, qualified nannies through our comprehensive 
-            vetting process and professional training programs.
+            vetting process and foundational training programs.
           </p>
         </div>
 

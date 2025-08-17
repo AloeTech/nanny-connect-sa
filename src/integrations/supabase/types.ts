@@ -7,7 +7,7 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instanciate createClient with right options
+  // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "12.2.12 (cd3cf9e)"
@@ -163,6 +163,7 @@ export type Database = {
       nannies: {
         Row: {
           academy_completed: boolean | null
+          accommodation_preference: string | null
           bio: string | null
           created_at: string
           credit_check_status:
@@ -173,6 +174,7 @@ export type Database = {
             | Database["public"]["Enums"]["document_status"]
             | null
           criminal_check_url: string | null
+          date_of_birth: string | null
           education_level: Database["public"]["Enums"]["education_level"] | null
           experience_duration: number | null
           experience_type: Database["public"]["Enums"]["experience_type"]
@@ -181,6 +183,7 @@ export type Database = {
           interview_video_url: string | null
           languages: string[] | null
           profile_approved: boolean | null
+          proof_of_residence_url: string | null
           training_child_development: boolean | null
           training_cpr: boolean | null
           training_first_aid: boolean | null
@@ -190,6 +193,7 @@ export type Database = {
         }
         Insert: {
           academy_completed?: boolean | null
+          accommodation_preference?: string | null
           bio?: string | null
           created_at?: string
           credit_check_status?:
@@ -200,6 +204,7 @@ export type Database = {
             | Database["public"]["Enums"]["document_status"]
             | null
           criminal_check_url?: string | null
+          date_of_birth?: string | null
           education_level?:
             | Database["public"]["Enums"]["education_level"]
             | null
@@ -210,6 +215,7 @@ export type Database = {
           interview_video_url?: string | null
           languages?: string[] | null
           profile_approved?: boolean | null
+          proof_of_residence_url?: string | null
           training_child_development?: boolean | null
           training_cpr?: boolean | null
           training_first_aid?: boolean | null
@@ -219,6 +225,7 @@ export type Database = {
         }
         Update: {
           academy_completed?: boolean | null
+          accommodation_preference?: string | null
           bio?: string | null
           created_at?: string
           credit_check_status?:
@@ -229,6 +236,7 @@ export type Database = {
             | Database["public"]["Enums"]["document_status"]
             | null
           criminal_check_url?: string | null
+          date_of_birth?: string | null
           education_level?:
             | Database["public"]["Enums"]["education_level"]
             | null
@@ -239,6 +247,7 @@ export type Database = {
           interview_video_url?: string | null
           languages?: string[] | null
           profile_approved?: boolean | null
+          proof_of_residence_url?: string | null
           training_child_development?: boolean | null
           training_cpr?: boolean | null
           training_first_aid?: boolean | null
@@ -361,6 +370,7 @@ export type Database = {
           phone: string | null
           profile_picture_url: string | null
           suburb: string | null
+          town: string | null
           updated_at: string
         }
         Insert: {
@@ -373,6 +383,7 @@ export type Database = {
           phone?: string | null
           profile_picture_url?: string | null
           suburb?: string | null
+          town?: string | null
           updated_at?: string
         }
         Update: {
@@ -385,6 +396,7 @@ export type Database = {
           phone?: string | null
           profile_picture_url?: string | null
           suburb?: string | null
+          town?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -429,8 +441,8 @@ export type Database = {
       }
       assign_user_role: {
         Args: {
-          _user_id: string
           _role: Database["public"]["Enums"]["user_role"]
+          _user_id: string
         }
         Returns: boolean
       }
@@ -440,8 +452,8 @@ export type Database = {
       }
       has_role: {
         Args: {
-          _user_id: string
           _role: Database["public"]["Enums"]["user_role"]
+          _user_id: string
         }
         Returns: boolean
       }

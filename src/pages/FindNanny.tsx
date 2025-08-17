@@ -29,11 +29,14 @@ interface Nanny {
   hourly_rate: number;
   bio: string;
   interview_video_url: string;
+  date_of_birth: string;
+  accommodation_preference: string;
   profiles: {
     first_name: string;
     last_name: string;
     city: string;
     suburb: string;
+    town: string;
     profile_picture_url: string;
     email: string;
   };
@@ -78,6 +81,7 @@ export default function FindNanny() {
             last_name,
             city,
             suburb,
+            town,
             profile_picture_url,
             email
           )
@@ -343,15 +347,37 @@ Nanny Placements SA Team`,
                   <h3 className="text-lg font-semibold">{nanny.profiles.first_name}</h3>
                   <p className="text-sm text-muted-foreground flex items-center gap-1">
                     <MapPin className="h-3 w-3" />
-                    {nanny.profiles.city}
+                    {nanny.profiles.city}{nanny.profiles.town ? `, ${nanny.profiles.town}` : ''}
                   </p>
+                  {nanny.date_of_birth && (
+                    <p className="text-xs text-muted-foreground">
+                      Age: {new Date().getFullYear() - new Date(nanny.date_of_birth).getFullYear()} years
+                    </p>
+                  )}
+                  {nanny.accommodation_preference && (
+                    <p className="text-xs text-muted-foreground capitalize">
+                      {nanny.accommodation_preference.replace('_', ' ')} position
+                    </p>
+                  )}
                 </div>
               </div>
 
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-xl font-semibold">{nanny.profiles.first_name}</h3>
-                  <p className="text-muted-foreground">{nanny.profiles.city}</p>
+                  <p className="text-muted-foreground">
+                    {nanny.profiles.city}{nanny.profiles.town ? `, ${nanny.profiles.town}` : ''}
+                  </p>
+                  {nanny.date_of_birth && (
+                    <p className="text-sm text-muted-foreground">
+                      Age: {new Date().getFullYear() - new Date(nanny.date_of_birth).getFullYear()} years • 
+                      {nanny.accommodation_preference && (
+                        <span className="capitalize ml-1">
+                          {nanny.accommodation_preference.replace('_', ' ')} position
+                        </span>
+                      )}
+                    </p>
+                  )}
                 </div>
                 <div className="text-right">
                   <p className="text-lg font-bold">R{nanny.hourly_rate}/hour</p>
@@ -451,8 +477,22 @@ Nanny Placements SA Team`,
                 )}
                 <div className="flex-1">
                   <h3 className="text-2xl font-bold">{selectedNanny.profiles.first_name}</h3>
-                  <p className="text-muted-foreground">{selectedNanny.profiles.city}, {selectedNanny.profiles.suburb}</p>
-                  <p className="text-xl font-semibold text-primary mt-2">R{selectedNanny.hourly_rate}/hour</p>
+                  <p className="text-muted-foreground">
+                    {selectedNanny.profiles.city}{selectedNanny.profiles.town ? `, ${selectedNanny.profiles.town}` : ''}{selectedNanny.profiles.suburb ? `, ${selectedNanny.profiles.suburb}` : ''}
+                  </p>
+                  <div className="flex gap-4 mt-1">
+                    <p className="text-xl font-semibold text-primary">R{selectedNanny.hourly_rate}/hour</p>
+                    {selectedNanny.date_of_birth && (
+                      <p className="text-lg text-muted-foreground">
+                        Age: {new Date().getFullYear() - new Date(selectedNanny.date_of_birth).getFullYear()} years
+                      </p>
+                    )}
+                  </div>
+                  {selectedNanny.accommodation_preference && (
+                    <p className="text-sm text-muted-foreground capitalize mt-1">
+                      Prefers {selectedNanny.accommodation_preference.replace('_', ' ')} position
+                    </p>
+                  )}
                   
                   <div className="flex flex-wrap gap-2 mt-3">
                     {selectedNanny.academy_completed && (

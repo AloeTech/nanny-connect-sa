@@ -109,6 +109,8 @@ export default function NannyDashboard() {
 
       // Fetch interests in this nanny
       if (nanny?.id) {
+        console.log('Fetching interests for nanny ID:', nanny.id);
+        
         const { data: interestsData, error: interestsError } = await supabase
           .from('interests')
           .select(`
@@ -124,6 +126,11 @@ export default function NannyDashboard() {
 
         if (interestsError) {
           console.error('Error fetching interests:', interestsError);
+          toast({
+            title: "Error",
+            description: "Failed to load interest requests",
+            variant: "destructive"
+          });
         } else {
           console.log('Fetched interests for nanny:', interestsData);
           setInterests(interestsData || []);

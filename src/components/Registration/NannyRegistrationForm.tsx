@@ -7,8 +7,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { X } from "lucide-react";
+import { X, Upload } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import { SOUTH_AFRICAN_CITIES } from "@/data/southAfricanCities";
 
 interface NannyData {
   bio: string;
@@ -21,6 +23,14 @@ interface NannyData {
   training_nanny: boolean;
   training_cpr: boolean;
   training_child_development: boolean;
+  date_of_birth: string;
+  accommodation_preference: 'live_in' | 'live_out';
+  proof_of_residence_url: string;
+}
+
+interface ProfileData {
+  city: string;
+  town: string;
 }
 
 interface Props {
@@ -29,6 +39,7 @@ interface Props {
 }
 
 export default function NannyRegistrationForm({ userId, onComplete }: Props) {
+  const { toast } = useToast();
   const [formData, setFormData] = useState<NannyData>({
     bio: '',
     languages: [],
@@ -40,10 +51,19 @@ export default function NannyRegistrationForm({ userId, onComplete }: Props) {
     training_nanny: false,
     training_cpr: false,
     training_child_development: false,
+    date_of_birth: '',
+    accommodation_preference: 'live_out',
+    proof_of_residence_url: '',
+  });
+  
+  const [profileData, setProfileData] = useState<ProfileData>({
+    city: '',
+    town: '',
   });
   
   const [newLanguage, setNewLanguage] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   const addLanguage = () => {
     if (newLanguage.trim() && !formData.languages.includes(newLanguage.trim())) {
@@ -62,20 +82,101 @@ export default function NannyRegistrationForm({ userId, onComplete }: Props) {
     }));
   };
 
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>, fileType: string) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${userId}/${fileType}.${fileExt}`;
+
+      let bucket = '';
+      switch (fileType) {
+        case 'proof_of_residence':
+          bucket = 'proof-of-residence';
+          break;
+        default:
+          throw new Error('Invalid file type');
+      }
+
+      const { error: uploadError } = await supabase.storage
+        .from(bucket)
+        .upload(fileName, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from(bucket)
+        .getPublicUrl(fileName);
+
+      setFormData(prev => ({
+        ...prev,
+        [`${fileType}_url`]: publicUrl
+      }));
+
+      toast({
+        title: "File uploaded successfully",
+        description: `Your ${fileType.replace('_', ' ')} has been uploaded.`,
+      });
+    } catch (error) {
+      console.error('Upload error:', error);
+      toast({
+        title: "Upload failed",
+        description: "There was an error uploading your file. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const calculateAge = (birthDate: string) => {
+    if (!birthDate) return null;
+    const today = new Date();
+    const birth = new Date(birthDate);
+    let age = today.getFullYear() - birth.getFullYear();
+    const monthDiff = today.getMonth() - birth.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+      age--;
+    }
+    return age;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
 
     try {
-      const { error } = await supabase
+      // Update nanny profile
+      const { error: nannyError } = await supabase
         .from('nannies')
         .update(formData)
         .eq('user_id', userId);
 
-      if (error) throw error;
+      if (nannyError) throw nannyError;
+
+      // Update profile data
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update(profileData)
+        .eq('id', userId);
+
+      if (profileError) throw profileError;
+
+      toast({
+        title: "Profile updated successfully",
+        description: "Your nanny profile has been completed.",
+      });
+
       onComplete();
     } catch (error) {
-      console.error('Error updating nanny profile:', error);
+      console.error('Error updating profile:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update profile. Please try again.",
+        variant: "destructive"
+      });
     } finally {
       setSubmitting(false);
     }
@@ -100,6 +201,88 @@ export default function NannyRegistrationForm({ userId, onComplete }: Props) {
               onChange={(e) => setFormData(prev => ({ ...prev, bio: e.target.value }))}
               rows={4}
             />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="date_of_birth">Date of Birth</Label>
+              <Input
+                id="date_of_birth"
+                type="date"
+                value={formData.date_of_birth}
+                onChange={(e) => setFormData(prev => ({ ...prev, date_of_birth: e.target.value }))}
+              />
+              {formData.date_of_birth && (
+                <p className="text-sm text-muted-foreground mt-1">
+                  Age: {calculateAge(formData.date_of_birth)} years
+                </p>
+              )}
+            </div>
+
+            <div>
+              <Label htmlFor="accommodation_preference">Accommodation Preference</Label>
+              <Select value={formData.accommodation_preference} onValueChange={(value: any) => setFormData(prev => ({ ...prev, accommodation_preference: value }))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="live_in">Live In</SelectItem>
+                  <SelectItem value="live_out">Live Out</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="city">City</Label>
+              <Select value={profileData.city} onValueChange={(value) => setProfileData(prev => ({ ...prev, city: value }))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select your city" />
+                </SelectTrigger>
+                <SelectContent>
+                  {SOUTH_AFRICAN_CITIES.map((city) => (
+                    <SelectItem key={city} value={city}>{city}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="town">Town/Suburb</Label>
+              <Input
+                id="town"
+                placeholder="Enter your town or suburb"
+                value={profileData.town}
+                onChange={(e) => setProfileData(prev => ({ ...prev, town: e.target.value }))}
+              />
+            </div>
+          </div>
+
+          <div>
+            <Label htmlFor="proof_of_residence">Proof of Residence</Label>
+            <div className="border-2 border-dashed border-border rounded-lg p-4 text-center">
+              <input
+                type="file"
+                id="proof_of_residence"
+                accept=".pdf,.jpg,.jpeg,.png"
+                onChange={(e) => handleFileUpload(e, 'proof_of_residence')}
+                className="hidden"
+                disabled={uploading}
+              />
+              <label htmlFor="proof_of_residence" className="cursor-pointer">
+                <Upload className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground mb-1">
+                  {uploading ? 'Uploading...' : 'Click to upload proof of residence'}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  PDF, JPG, JPEG, PNG up to 10MB
+                </p>
+              </label>
+              {formData.proof_of_residence_url && (
+                <p className="text-sm text-green-600 mt-2">✓ Proof of residence uploaded</p>
+              )}
+            </div>
           </div>
 
           <div>

@@ -63,7 +63,7 @@ export default function PayButton({ interestId, amount, nannyName, clientName }:
       ) : (
         <>
           <CreditCard className="h-4 w-4 mr-2" />
-          Pay R{amount} & Arrange Interview
+          Pay R200 & Arrange Interview
         </>
       )}
     </Button>

@@ -195,7 +195,7 @@ export default function InterestManagement({ interests, userRole, onInterestUpda
              interest.payment_status === 'pending' && (
               <PayButton 
                 interestId={interest.id}
-                amount={500}
+                amount={200}
                 nannyName={interest.nannies?.profiles ? 
                   `${interest.nannies.profiles.first_name} ${interest.nannies.profiles.last_name}` : 'Nanny'}
                 clientName={interest.clients?.profiles ? 

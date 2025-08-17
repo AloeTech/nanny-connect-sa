@@ -30,7 +30,18 @@ serve(async (req) => {
     let emailContent = message;
     
     // Handle different email types
-    if (type === 'interview_setup' && interestId) {
+    if (type === 'new_interest') {
+      emailContent = `You have received a new interest request from a client on Nanny Placements SA!
+
+Client Message: "${message}"
+
+A client is interested in your nanny services and would like to get in touch. Please log in to your nanny dashboard to review this request and approve or decline it.
+
+🔗 Login to your dashboard: ${Deno.env.get("SITE_URL") || "https://nannyplacement.co.za"}/dashboard
+
+Best regards,
+Nanny Placements SA Team`;
+    } else if (type === 'interview_setup' && interestId) {
       emailContent = `Great news! Payment has been confirmed for the nanny placement service.
 
 Nanny: ${nannyName}

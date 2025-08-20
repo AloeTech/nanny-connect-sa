@@ -9,8 +9,10 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
-import { User, MapPin, Phone, Mail, Upload, Save } from 'lucide-react';
+import { User, MapPin, Phone, Mail, Upload, Save, X } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
+import { SOUTH_AFRICAN_CITIES } from '@/data/southAfricanCities';
 
 interface UserProfile {
   id: string;
@@ -19,6 +21,7 @@ interface UserProfile {
   email: string;
   phone: string;
   city: string;
+  town: string;
   suburb: string;
   profile_picture_url: string;
 }
@@ -28,6 +31,7 @@ interface NannyProfile {
   bio: string;
   languages: string[];
   experience_type: 'nanny' | 'cleaning' | 'both';
+  employment_type: 'part_time' | 'full_time';
   experience_duration: number;
   education_level: 'matric' | 'certificate' | 'diploma' | 'degree';
   hourly_rate: number;
@@ -35,6 +39,9 @@ interface NannyProfile {
   training_nanny: boolean;
   training_cpr: boolean;
   training_child_development: boolean;
+  date_of_birth: string;
+  accommodation_preference: 'live_in' | 'live_out';
+  proof_of_residence_url: string;
 }
 
 interface ClientProfile {
@@ -61,6 +68,8 @@ export default function Profile() {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [nannyProfile, setNannyProfile] = useState<NannyProfile | null>(null);
   const [clientProfile, setClientProfile] = useState<ClientProfile | null>(null);
+  const [newLanguage, setNewLanguage] = useState('');
+  const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -92,7 +101,11 @@ export default function Profile() {
           .single();
 
         if (nanny) {
-          setNannyProfile(nanny);
+          setNannyProfile({
+            ...nanny,
+            employment_type: (nanny.employment_type as 'part_time' | 'full_time') || 'full_time',
+            accommodation_preference: (nanny.accommodation_preference as 'live_in' | 'live_out') || 'live_out'
+          });
         }
       } else if (userRole === 'client') {
         const { data: client } = await supabase
@@ -200,6 +213,65 @@ export default function Profile() {
     }
   };
 
+  const addLanguage = () => {
+    if (newLanguage.trim() && nannyProfile && !nannyProfile.languages.includes(newLanguage.trim())) {
+      setNannyProfile({
+        ...nannyProfile,
+        languages: [...nannyProfile.languages, newLanguage.trim()]
+      });
+      setNewLanguage('');
+    }
+  };
+
+  const removeLanguage = (language: string) => {
+    if (nannyProfile) {
+      setNannyProfile({
+        ...nannyProfile,
+        languages: nannyProfile.languages.filter(lang => lang !== language)
+      });
+    }
+  };
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>, fileType: string) => {
+    const file = event.target.files?.[0];
+    if (!file || !nannyProfile) return;
+
+    setUploading(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user?.id}/${fileType}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('proof-of-residence')
+        .upload(fileName, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('proof-of-residence')
+        .getPublicUrl(fileName);
+
+      setNannyProfile({
+        ...nannyProfile,
+        proof_of_residence_url: publicUrl
+      });
+
+      toast({
+        title: "File uploaded successfully",
+        description: "Your proof of residence has been uploaded.",
+      });
+    } catch (error) {
+      console.error('Upload error:', error);
+      toast({
+        title: "Upload failed",
+        description: "There was an error uploading your file. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const createRoleProfile = async () => {
     if (userRole === 'nanny' && !nannyProfile) {
       setNannyProfile({
@@ -207,13 +279,17 @@ export default function Profile() {
         bio: '',
         languages: [],
         experience_type: 'nanny',
+        employment_type: 'full_time',
         experience_duration: 0,
         education_level: 'matric',
-        hourly_rate: 0,
+        hourly_rate: 50,
         training_first_aid: false,
         training_nanny: false,
         training_cpr: false,
-        training_child_development: false
+        training_child_development: false,
+        date_of_birth: '',
+        accommodation_preference: 'live_out',
+        proof_of_residence_url: '',
       });
     } else if (userRole === 'client' && !clientProfile) {
       setClientProfile({
@@ -303,17 +379,31 @@ export default function Profile() {
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <Label htmlFor="city">City</Label>
+                  <Select value={userProfile?.city || ''} onValueChange={(value) => setUserProfile(prev => prev ? {...prev, city: value} : null)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select your city" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SOUTH_AFRICAN_CITIES.map((city) => (
+                        <SelectItem key={city} value={city}>{city}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="town">Town/Suburb</Label>
                   <Input
-                    id="city"
-                    value={userProfile?.city || ''}
-                    onChange={(e) => setUserProfile(prev => prev ? {...prev, city: e.target.value} : null)}
+                    id="town"
+                    placeholder="Enter your town or suburb"
+                    value={userProfile?.town || ''}
+                    onChange={(e) => setUserProfile(prev => prev ? {...prev, town: e.target.value} : null)}
                   />
                 </div>
                 <div>
-                  <Label htmlFor="suburb">Suburb</Label>
+                  <Label htmlFor="suburb">Additional Suburb Info</Label>
                   <Input
                     id="suburb"
                     value={userProfile?.suburb || ''}
@@ -356,7 +446,80 @@ export default function Profile() {
                       placeholder="Tell families about yourself, your experience, and what makes you special..."
                       value={nannyProfile.bio}
                       onChange={(e) => setNannyProfile({...nannyProfile, bio: e.target.value})}
+                      rows={4}
                     />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="date_of_birth">Date of Birth</Label>
+                      <Input
+                        id="date_of_birth"
+                        type="date"
+                        value={nannyProfile.date_of_birth}
+                        onChange={(e) => setNannyProfile({...nannyProfile, date_of_birth: e.target.value})}
+                      />
+                      {nannyProfile.date_of_birth && (
+                        <p className="text-sm text-muted-foreground mt-1">
+                          Age: {new Date().getFullYear() - new Date(nannyProfile.date_of_birth).getFullYear()} years
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <Label htmlFor="accommodation_preference">Accommodation Preference</Label>
+                      <Select value={nannyProfile.accommodation_preference} onValueChange={(value: any) => setNannyProfile({...nannyProfile, accommodation_preference: value})}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="live_in">Live In</SelectItem>
+                          <SelectItem value="live_out">Live Out</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="employment_type">Employment Type</Label>
+                      <Select value={nannyProfile.employment_type} onValueChange={(value: any) => setNannyProfile({...nannyProfile, employment_type: value})}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="part_time">Part Time</SelectItem>
+                          <SelectItem value="full_time">Full Time</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div></div>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="proof_of_residence">Proof of Residence</Label>
+                    <div className="border-2 border-dashed border-border rounded-lg p-4 text-center">
+                      <input
+                        type="file"
+                        id="proof_of_residence"
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        onChange={(e) => handleFileUpload(e, 'proof_of_residence')}
+                        className="hidden"
+                        disabled={uploading}
+                      />
+                      <label htmlFor="proof_of_residence" className="cursor-pointer">
+                        <Upload className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                        <p className="text-sm text-muted-foreground mb-1">
+                          {uploading ? 'Uploading...' : 'Click to upload proof of residence'}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          PDF, JPG, JPEG, PNG up to 10MB
+                        </p>
+                      </label>
+                      {nannyProfile.proof_of_residence_url && (
+                        <p className="text-sm text-green-600 mt-2">✓ Proof of residence uploaded</p>
+                      )}
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -420,29 +583,22 @@ export default function Profile() {
                   </div>
 
                   <div>
-                    <Label>Languages Spoken</Label>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-2">
-                      {SA_LANGUAGES.map(language => (
-                        <div key={language} className="flex items-center space-x-2">
-                          <Checkbox
-                            id={language}
-                            checked={nannyProfile.languages.includes(language)}
-                            onCheckedChange={(checked) => {
-                              if (checked) {
-                                setNannyProfile({
-                                  ...nannyProfile, 
-                                  languages: [...nannyProfile.languages, language]
-                                });
-                              } else {
-                                setNannyProfile({
-                                  ...nannyProfile,
-                                  languages: nannyProfile.languages.filter(l => l !== language)
-                                });
-                              }
-                            }}
-                          />
-                          <Label htmlFor={language} className="text-sm">{language}</Label>
-                        </div>
+                    <Label>Languages</Label>
+                    <div className="flex gap-2 mb-2">
+                      <Input
+                        placeholder="Add a language"
+                        value={newLanguage}
+                        onChange={(e) => setNewLanguage(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addLanguage())}
+                      />
+                      <Button type="button" onClick={addLanguage}>Add</Button>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {nannyProfile.languages.map((language) => (
+                        <Badge key={language} variant="secondary" className="flex items-center gap-1">
+                          {language}
+                          <X className="h-3 w-3 cursor-pointer" onClick={() => removeLanguage(language)} />
+                        </Badge>
                       ))}
                     </div>
                   </div>

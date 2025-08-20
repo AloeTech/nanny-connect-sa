@@ -15,6 +15,7 @@ interface NannyProfile {
   bio: string;
   languages: string[];
   experience_type: string;
+  employment_type: string;
   experience_duration: number;
   education_level: string;
   hourly_rate: number;
@@ -29,6 +30,9 @@ interface NannyProfile {
   criminal_check_url: string;
   credit_check_url: string;
   interview_video_url: string;
+  date_of_birth: string;
+  accommodation_preference: string;
+  proof_of_residence_url: string;
 }
 
 interface UserProfile {
@@ -37,6 +41,7 @@ interface UserProfile {
   email: string;
   phone: string;
   city: string;
+  town: string;
   suburb: string;
   profile_picture_url: string;
 }
@@ -149,14 +154,15 @@ export default function NannyDashboard() {
     }
   };
 
-  const handleFileUpload = async (file: File, type: 'criminal_check' | 'credit_check' | 'interview_video' | 'profile_picture' | 'intro_video') => {
+  const handleFileUpload = async (file: File, type: 'criminal_check' | 'credit_check' | 'interview_video' | 'profile_picture' | 'intro_video' | 'proof_of_residence') => {
     try {
       const fileExt = file.name.split('.').pop();
       const fileName = `${user?.id}/${type}-${Date.now()}.${fileExt}`;
       
       const bucketName = type === 'criminal_check' ? 'criminal-checks' : 
                         type === 'credit_check' ? 'credit-checks' : 
-                        type === 'profile_picture' ? 'profile-pictures' : 'interview-videos';
+                        type === 'profile_picture' ? 'profile-pictures' : 
+                        type === 'proof_of_residence' ? 'proof-of-residence' : 'interview-videos';
       
       console.log('Uploading file:', fileName, 'to bucket:', bucketName);
       
@@ -197,6 +203,8 @@ export default function NannyDashboard() {
           updateData.credit_check_status = 'pending';
         } else if (type === 'interview_video' || type === 'intro_video') {
           updateData.interview_video_url = fileUrl;
+        } else if (type === 'proof_of_residence') {
+          updateData.proof_of_residence_url = fileUrl;
         }
 
         const { error: updateError } = await supabase
@@ -344,7 +352,16 @@ export default function NannyDashboard() {
                   <label className="text-sm font-medium text-muted-foreground">Location</label>
                   <p className="flex items-center gap-1">
                     <MapPin className="h-4 w-4" />
-                    {userProfile?.suburb}, {userProfile?.city}
+                    {userProfile?.city}{userProfile?.town ? `, ${userProfile.town}` : ''}{userProfile?.suburb ? `, ${userProfile.suburb}` : ''}
+                  </p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Age</label>
+                  <p>
+                    {nannyProfile?.date_of_birth ? 
+                      `${new Date().getFullYear() - new Date(nannyProfile.date_of_birth).getFullYear()} years` : 
+                      'Not specified'
+                    }
                   </p>
                 </div>
                 <div>
@@ -359,6 +376,12 @@ export default function NannyDashboard() {
                   <p className="flex items-center gap-1">
                     <Award className="h-4 w-4" />
                     {nannyProfile?.experience_duration} years - {nannyProfile?.experience_type}
+                  </p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Employment & Accommodation</label>
+                  <p className="capitalize">
+                    {nannyProfile?.employment_type?.replace('_', ' ')} • {nannyProfile?.accommodation_preference?.replace('_', ' ')}
                   </p>
                 </div>
                 <div>
@@ -495,6 +518,28 @@ export default function NannyDashboard() {
                   >
                     <Upload className="h-4 w-4 mr-2" />
                     Upload Credit Check
+                  </Button>
+                </div>
+              )}
+              {!nannyProfile?.proof_of_residence_url && (
+                <div>
+                  <input
+                    type="file"
+                    id="proof-of-residence-upload"
+                    accept=".pdf,.jpg,.jpeg,.png"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleFileUpload(file, 'proof_of_residence');
+                    }}
+                  />
+                  <Button 
+                    variant="outline" 
+                    className="w-full justify-start"
+                    onClick={() => document.getElementById('proof-of-residence-upload')?.click()}
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    Upload Proof of Residence
                   </Button>
                 </div>
               )}

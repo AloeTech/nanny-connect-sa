@@ -31,6 +31,7 @@ interface Nanny {
   interview_video_url: string;
   date_of_birth: string;
   accommodation_preference: string;
+  employment_type: string;
   profiles: {
     first_name: string;
     last_name: string;
@@ -50,6 +51,8 @@ export default function FindNanny() {
   const [filters, setFilters] = useState({
     city: '',
     experienceType: '',
+    employmentType: '',
+    accommodationPreference: '',
     maxRate: '',
     languages: ''
   });
@@ -245,6 +248,12 @@ Nanny Placements SA Team`,
     if (filters.experienceType && filters.experienceType !== 'all' && nanny.experience_type !== filters.experienceType) {
       return false;
     }
+    if (filters.employmentType && filters.employmentType !== 'all' && nanny.employment_type !== filters.employmentType) {
+      return false;
+    }
+    if (filters.accommodationPreference && filters.accommodationPreference !== 'all' && nanny.accommodation_preference !== filters.accommodationPreference) {
+      return false;
+    }
     if (filters.maxRate && nanny.hourly_rate > parseFloat(filters.maxRate)) {
       return false;
     }
@@ -279,7 +288,7 @@ Nanny Placements SA Team`,
           <CardTitle>Filter Nannies</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid md:grid-cols-4 gap-4">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <Label htmlFor="city">City</Label>
               <Input
@@ -300,6 +309,32 @@ Nanny Placements SA Team`,
                   <SelectItem value="nanny">Nanny only</SelectItem>
                   <SelectItem value="cleaning">Cleaning only</SelectItem>
                   <SelectItem value="both">Both nanny & cleaning</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="employment">Employment Type</Label>
+              <Select value={filters.employmentType} onValueChange={(value) => setFilters(prev => ({ ...prev, employmentType: value }))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Any employment type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Any employment type</SelectItem>
+                  <SelectItem value="part_time">Part Time</SelectItem>
+                  <SelectItem value="full_time">Full Time</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="accommodation">Accommodation</Label>
+              <Select value={filters.accommodationPreference} onValueChange={(value) => setFilters(prev => ({ ...prev, accommodationPreference: value }))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Any accommodation" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Any accommodation</SelectItem>
+                  <SelectItem value="live_in">Live In</SelectItem>
+                  <SelectItem value="live_out">Live Out</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -354,11 +389,11 @@ Nanny Placements SA Team`,
                       Age: {new Date().getFullYear() - new Date(nanny.date_of_birth).getFullYear()} years
                     </p>
                   )}
-                  {nanny.accommodation_preference && (
-                    <p className="text-xs text-muted-foreground capitalize">
-                      {nanny.accommodation_preference.replace('_', ' ')} position
-                    </p>
-                  )}
+                   {nanny.accommodation_preference && (
+                     <p className="text-xs text-muted-foreground capitalize">
+                       {nanny.accommodation_preference.replace('_', ' ')} • {nanny.employment_type?.replace('_', ' ')}
+                     </p>
+                   )}
                 </div>
               </div>
 
@@ -369,14 +404,14 @@ Nanny Placements SA Team`,
                     {nanny.profiles.city}{nanny.profiles.town ? `, ${nanny.profiles.town}` : ''}
                   </p>
                   {nanny.date_of_birth && (
-                    <p className="text-sm text-muted-foreground">
-                      Age: {new Date().getFullYear() - new Date(nanny.date_of_birth).getFullYear()} years • 
-                      {nanny.accommodation_preference && (
-                        <span className="capitalize ml-1">
-                          {nanny.accommodation_preference.replace('_', ' ')} position
-                        </span>
-                      )}
-                    </p>
+                     <p className="text-sm text-muted-foreground">
+                       Age: {new Date().getFullYear() - new Date(nanny.date_of_birth).getFullYear()} years • 
+                       {nanny.accommodation_preference && (
+                         <span className="capitalize ml-1">
+                           {nanny.accommodation_preference.replace('_', ' ')} • {nanny.employment_type?.replace('_', ' ')}
+                         </span>
+                       )}
+                     </p>
                   )}
                 </div>
                 <div className="text-right">

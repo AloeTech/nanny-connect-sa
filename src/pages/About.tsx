@@ -126,10 +126,10 @@ export default function About() {
               <h3 className="text-2xl font-semibold text-foreground mb-4">Most Competitive Rates</h3>
               <p className="text-lg text-muted-foreground mb-6">
                 We offer one of the most competitive nanny placement services in South Africa, with a maximum 
-                once-off matching fee of R500.00.
+                once-off matching fee of R200.00.
               </p>
               <Badge variant="secondary" className="text-lg px-6 py-2 bg-primary text-primary-foreground">
-                Maximum Fee: R500.00
+                Maximum Fee: R200.00
               </Badge>
             </div>
           </CardContent>

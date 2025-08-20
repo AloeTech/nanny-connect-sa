@@ -95,7 +95,7 @@ export default function TermsOfService() {
                   Placement Fee
                 </Badge>
                 <p className="text-muted-foreground">
-                  Our placement fee is a maximum of R500.00, paid once upon successful matching between a family and nanny.
+                  Our placement fee is a maximum of R200.00, paid once upon successful matching between a family and nanny.
                 </p>
               </div>
               <ul className="list-disc pl-6 text-muted-foreground space-y-2">

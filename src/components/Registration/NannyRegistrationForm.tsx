@@ -16,6 +16,7 @@ interface NannyData {
   bio: string;
   languages: string[];
   experience_type: 'nanny' | 'cleaning' | 'both';
+  employment_type: 'part_time' | 'full_time';
   experience_duration: number;
   education_level: 'matric' | 'certificate' | 'diploma' | 'degree';
   hourly_rate: number;
@@ -44,6 +45,7 @@ export default function NannyRegistrationForm({ userId, onComplete }: Props) {
     bio: '',
     languages: [],
     experience_type: 'nanny',
+    employment_type: 'full_time',
     experience_duration: 0,
     education_level: 'matric',
     hourly_rate: 50,
@@ -231,6 +233,22 @@ export default function NannyRegistrationForm({ userId, onComplete }: Props) {
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="employment_type">Employment Type</Label>
+              <Select value={formData.employment_type} onValueChange={(value: any) => setFormData(prev => ({ ...prev, employment_type: value }))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="part_time">Part Time</SelectItem>
+                  <SelectItem value="full_time">Full Time</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div></div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -176,6 +176,7 @@ export type Database = {
           criminal_check_url: string | null
           date_of_birth: string | null
           education_level: Database["public"]["Enums"]["education_level"] | null
+          employment_type: string | null
           experience_duration: number | null
           experience_type: Database["public"]["Enums"]["experience_type"]
           hourly_rate: number | null
@@ -208,6 +209,7 @@ export type Database = {
           education_level?:
             | Database["public"]["Enums"]["education_level"]
             | null
+          employment_type?: string | null
           experience_duration?: number | null
           experience_type: Database["public"]["Enums"]["experience_type"]
           hourly_rate?: number | null
@@ -240,6 +242,7 @@ export type Database = {
           education_level?:
             | Database["public"]["Enums"]["education_level"]
             | null
+          employment_type?: string | null
           experience_duration?: number | null
           experience_type?: Database["public"]["Enums"]["experience_type"]
           hourly_rate?: number | null

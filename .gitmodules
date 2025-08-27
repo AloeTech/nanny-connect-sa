@@ -1,0 +1,3 @@
+[submodule "nanny-connect-sa"]
+	path = nanny-connect-sa
+	url = https://github.com/AloeTech/nanny-connect-sa.git

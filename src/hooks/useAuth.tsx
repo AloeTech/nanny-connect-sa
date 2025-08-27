@@ -205,7 +205,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
       
       // Force page reload for clean state
-      window.location.href = '/Home';
+      window.location.href = '/';
     } catch (error: any) {
       toast({
         title: "Sign Out Error",

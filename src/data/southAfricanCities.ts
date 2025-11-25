@@ -91,5 +91,6 @@ export const SOUTH_AFRICAN_CITIES = [
   "Citrusdal",
   "Grabouw",
   "Caledon",
-  "Bredasdorp"
+  "Bredasdorp",
+  "Thohoyandou"
 ];

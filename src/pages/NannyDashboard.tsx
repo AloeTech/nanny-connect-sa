@@ -6,11 +6,22 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
-import { CheckCircle, Clock, Upload, Video, User, MapPin, Languages, GraduationCap, Award, Heart } from 'lucide-react';
+import { 
+  CheckCircle, Clock, Upload, Video, User, MapPin, Languages, 
+  GraduationCap, Award, Heart 
+} from 'lucide-react';
 import { Link } from 'react-router-dom';
 import emailjs from '@emailjs/browser';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
 
-// Initialize EmailJS with the public key from FindNanny
+// Initialize EmailJS
 emailjs.init('rK97vwvxnXTTY8PjW');
 
 interface NannyProfile {
@@ -69,7 +80,6 @@ interface Interest {
   nanny_email: string | null;
 }
 
-// Map numeric experience_duration to dropdown labels
 const experienceDurationOptions = [
   { label: '0 years', value: 0 },
   { label: '1-2 years', value: 2 },
@@ -93,6 +103,10 @@ export default function NannyDashboard() {
   const [interests, setInterests] = useState<Interest[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Dialog state
+  const [isVideoDialogOpen, setIsVideoDialogOpen] = useState(false);
+  const [pendingVideoFile, setPendingVideoFile] = useState<File | null>(null);
+
   useEffect(() => {
     if (user && userRole === 'nanny') {
       fetchData();
@@ -102,7 +116,6 @@ export default function NannyDashboard() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      // Fetch nanny profile
       const { data: nannyData, error: nannyError } = await supabase
         .from('nannies')
         .select('*')
@@ -118,7 +131,6 @@ export default function NannyDashboard() {
       };
       setNannyProfile(safeNannyData);
 
-      // Fetch user profile
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
@@ -128,7 +140,6 @@ export default function NannyDashboard() {
       if (profileError) throw profileError;
       setUserProfile(profileData);
 
-      // Fetch academy progress
       const { data: totalVideos } = await supabase
         .from('academy_videos')
         .select('id')
@@ -149,9 +160,7 @@ export default function NannyDashboard() {
         progress_percentage: percentage,
       });
 
-      // Fetch interests for the specific nanny
       if (nannyData?.id) {
-        console.log('Fetching interests for nanny ID:', nannyData.id);
         const { data: interestsData, error: interestsError } = await supabase
           .from('interests')
           .select(`
@@ -175,19 +184,16 @@ export default function NannyDashboard() {
           .order('created_at', { ascending: false });
 
         if (interestsError) {
-          console.error('Error fetching interests:', interestsError.message, interestsError.details);
           toast({
             title: 'Error',
             description: 'Failed to load interest requests',
             variant: 'destructive',
           });
         } else {
-          console.log('Fetched interests for nanny:', interestsData);
           setInterests(interestsData as Interest[] || []);
         }
       }
     } catch (error: any) {
-      console.error('Error fetching data:', error.message);
       toast({
         title: 'Error',
         description: 'Failed to load dashboard data',
@@ -210,8 +216,6 @@ export default function NannyDashboard() {
         : type === 'profile_picture'
         ? 'profile-pictures'
         : 'interview-videos';
-
-      console.log('Uploading file:', fileName, 'to bucket:', bucketName);
 
       const { error: uploadError } = await supabase.storage.from(bucketName).upload(fileName, file);
 
@@ -272,8 +276,6 @@ export default function NannyDashboard() {
     const interest = interests.find(i => i.id === interestId);
     if (!interest || !userProfile) return;
 
-    // Update interests table
-    console.log(`Attempting to update interest ${interestId} with status: ${response}`);
     const { data, error: updateError } = await supabase
       .from('interests')
       .update({
@@ -283,31 +285,17 @@ export default function NannyDashboard() {
       .eq('id', interestId)
       .select();
 
-    if (updateError) {
-      console.error('Error updating interest:', updateError.message, updateError.details, updateError.code);
+    if (updateError || !data || data.length === 0) {
       toast({
         title: 'Error',
-        description: `Failed to update interest response: ${updateError.message}. Check console for details.`,
+        description: 'Failed to update interest response',
         variant: 'destructive',
       });
       return;
     }
 
-    if (!data || data.length === 0) {
-      console.error('No data returned after update for interest:', interestId);
-      toast({
-        title: 'Error',
-        description: 'Failed to retrieve updated interest data.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    console.log('Updated interest data:', data[0]);
-    // Update local state with the returned data
     setInterests(interests.map(i => i.id === interestId ? data[0] as Interest : i));
 
-    // Send email notification to client using EmailJS
     const emailParams = {
       serviceID: 'service_syqn4ol',
       templateID: 'template_exkrbne',
@@ -316,50 +304,46 @@ export default function NannyDashboard() {
         name: `${interest.client_first_name} ${interest.client_last_name || ''}`,
         email: interest.client_email || '',
         subject: `Interest Response - Nanny Placements SA`,
-        message: `Your interest request for ${interest.nanny_first_name} ${interest.nanny_last_name || ''} has been ${response}.
-
-${userProfile.first_name}'s response: "${userProfile.first_name} has ${response} your request on ${new Date().toLocaleDateString()}."
-
-Best regards,
-Nanny Placements SA Team`,
+        message: `Your interest request for ${interest.nanny_first_name} ${interest.nanny_last_name || ''} has been ${response}.\n\n${userProfile.first_name}'s response: "${userProfile.first_name} has ${response} your request on ${new Date().toLocaleDateString()}."\n\nBest regards,\nNanny Placements SA Team`,
         to_email: interest.client_email || '',
       },
     };
 
     try {
       await emailjs.send(emailParams.serviceID, emailParams.templateID, emailParams.templateParams, emailParams.publicKey);
-      toast({
-        title: 'Success',
-        description: `Email sent to ${interest.client_email} regarding ${response} interest.`,
-      });
-    } catch (error: any) {
-      console.error('Email sending failed:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to send email notification',
-        variant: 'destructive',
-      });
+      toast({ title: 'Success', description: `Email sent to client` });
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to send email', variant: 'destructive' });
+    }
+  };
+
+  const openVideoDialog = () => setIsVideoDialogOpen(true);
+  const closeVideoDialog = () => {
+    setIsVideoDialogOpen(false);
+    setPendingVideoFile(null);
+  };
+
+  const confirmVideoUpload = () => {
+    if (pendingVideoFile) {
+      handleFileUpload(pendingVideoFile, 'interview_video');
+      closeVideoDialog();
     }
   };
 
   if (userRole !== 'nanny') {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-destructive">Access Denied</h1>
-          <p className="text-muted-foreground mt-2">This page is only accessible to nannies.</p>
-        </div>
+      <div className="container mx-auto px-4 py-8 text-center">
+        <h1 className="text-2xl font-bold text-destructive">Access Denied</h1>
+        <p className="text-muted-foreground mt-2">This page is only accessible to nannies.</p>
       </div>
     );
   }
 
   if (loading) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-2 text-muted-foreground">Loading dashboard...</p>
-        </div>
+      <div className="container mx-auto px-4 py-8 text-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+        <p className="mt-2 text-muted-foreground">Loading dashboard...</p>
       </div>
     );
   }
@@ -380,40 +364,24 @@ Nanny Placements SA Team`,
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Profile Status Overview */}
+        {/* Left Column */}
         <div className="lg:col-span-2 space-y-6">
+          {/* Profile Status */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <User className="h-5 w-5" />
-                Profile Status
-              </CardTitle>
+              <CardTitle className="flex items-center gap-2"><User className="h-5 w-5" /> Profile Status</CardTitle>
               <CardDescription>Complete your profile to start receiving client interests</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <div className="flex items-center justify-between">
-                  <span>Criminal Check</span>
-                  {getStatusBadge(nannyProfile?.criminal_check_status || 'pending')}
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>Credit Check</span>
-                  {getStatusBadge(nannyProfile?.credit_check_status || 'pending')}
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>Academy Training</span>
-                  {getStatusBadge('', nannyProfile?.academy_completed || false)}
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>Profile Approval</span>
-                  {getStatusBadge('', nannyProfile?.profile_approved || false)}
-                </div>
+                <div className="flex items-center justify-between"><span>Criminal Check</span>{getStatusBadge(nannyProfile?.criminal_check_status || 'pending')}</div>
+                <div className="flex items-center justify-between"><span>Credit Check</span>{getStatusBadge(nannyProfile?.credit_check_status || 'pending')}</div>
+                <div className="flex items-center justify-between"><span>Academy Training</span>{getStatusBadge('', nannyProfile?.academy_completed || false)}</div>
+                <div className="flex items-center justify-between"><span>Profile Approval</span>{getStatusBadge('', nannyProfile?.profile_approved || false)}</div>
               </div>
               {!nannyProfile?.profile_approved && (
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                  <p className="text-sm text-yellow-800">
-                    Complete all requirements to get your profile approved and start receiving client interest.
-                  </p>
+                  <p className="text-sm text-yellow-800">Complete all requirements to get your profile approved and start receiving client interest.</p>
                 </div>
               )}
             </CardContent>
@@ -422,121 +390,56 @@ Nanny Placements SA Team`,
           {/* Academy Progress */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Video className="h-5 w-5" />
-                Academy Progress
-              </CardTitle>
+              <CardTitle className="flex items-center gap-2"><Video className="h-5 w-5" /> Academy Progress</CardTitle>
               <CardDescription>Complete all academy videos to earn your certification</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span>Videos Completed</span>
-                  <span>{academyProgress.completed_videos} / {academyProgress.total_videos}</span>
-                </div>
+                <div className="flex justify-between text-sm"><span>Videos Completed</span><span>{academyProgress.completed_videos} / {academyProgress.total_videos}</span></div>
                 <Progress value={academyProgress.progress_percentage} className="h-2" />
                 <p className="text-xs text-muted-foreground">{academyProgress.progress_percentage}% complete</p>
               </div>
-              <Link to="/academy">
-                <Button className="w-full">
-                  {academyProgress.progress_percentage === 100 ? 'Review Academy' : 'Continue Academy'}
-                </Button>
-              </Link>
+              <Link to="/academy"><Button className="w-full">{academyProgress.progress_percentage === 100 ? 'Review Academy' : 'Continue Academy'}</Button></Link>
             </CardContent>
           </Card>
 
           {/* Profile Information */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <User className="h-5 w-5" />
-                Profile Information
-              </CardTitle>
+              <CardTitle className="flex items-center gap-2"><User className="h-5 w-5" /> Profile Information</CardTitle>
               <CardDescription>Your professional nanny profile</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Location</label>
-                  <p className="flex items-center gap-1">
-                    <MapPin className="h-4 w-4" />
-                    {userProfile?.suburb}, {userProfile?.city}
-                  </p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Languages</label>
-                  <p className="flex items-center gap-1">
-                    <Languages className="h-4 w-4" />
-                    {nannyProfile?.languages?.join(', ') || 'Not specified'}
-                  </p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Experience</label>
-                  <p className="flex items-center gap-1">
-                    <Award className="h-4 w-4" />
-                    {getExperienceLabel(nannyProfile?.experience_duration)} - {nannyProfile?.experience_type}
-                  </p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Education</label>
-                  <p className="flex items-center gap-1">
-                    <GraduationCap className="h-4 w-4" />
-                    {nannyProfile?.education_level || 'Not specified'}
-                  </p>
-                </div>
+                <div><label className="text-sm font-medium text-muted-foreground">Location</label><p className="flex items-center gap-1"><MapPin className="h-4 w-4" />{userProfile?.suburb}, {userProfile?.city}</p></div>
+                <div><label className="text-sm font-medium text-muted-foreground">Languages</label><p className="flex items-center gap-1"><Languages className="h-4 w-4" />{nannyProfile?.languages?.join(', ') || 'Not specified'}</p></div>
+                <div><label className="text-sm font-medium text-muted-foreground">Experience</label><p className="flex items-center gap-1"><Award className="h-4 w-4" />{getExperienceLabel(nannyProfile?.experience_duration)} - {nannyProfile?.experience_type}</p></div>
+                <div><label className="text-sm font-medium text-muted-foreground">Education</label><p className="flex items-center gap-1"><GraduationCap className="h-4 w-4" />{nannyProfile?.education_level || 'Not specified'}</p></div>
               </div>
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">Bio</label>
-                <p className="text-sm mt-1">{nannyProfile?.bio || 'No bio provided'}</p>
-              </div>
-              <Link to="/profile">
-                <Button variant="outline" className="w-full">Edit Profile</Button>
-              </Link>
+              <div><label className="text-sm font-medium text-muted-foreground">Bio</label><p className="text-sm mt-1">{nannyProfile?.bio || 'No bio provided'}</p></div>
+              <Link to="/profile"><Button variant="outline" className="w-full">Edit Profile</Button></Link>
             </CardContent>
           </Card>
         </div>
 
-        {/* Quick Actions */}
+        {/* Right Column - Quick Actions */}
         <div className="space-y-6">
           <Card>
-            <CardHeader>
-              <CardTitle>Quick Actions</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle>Quick Actions</CardTitle></CardHeader>
             <CardContent className="space-y-3">
-              <Link to="/profile">
-                <Button variant="outline" className="w-full justify-start">
-                  <User className="h-4 w-4 mr-2" />
-                  Edit Profile
-                </Button>
-              </Link>
-              <Link to="/academy">
-                <Button variant="outline" className="w-full justify-start">
-                  <Video className="h-4 w-4 mr-2" />
-                  Academy Training
-                </Button>
-              </Link>
+              <Link to="/profile"><Button variant="outline" className="w-full justify-start"><User className="h-4 w-4 mr-2" />Edit Profile</Button></Link>
+              <Link to="/academy"><Button variant="outline" className="w-full justify-start"><Video className="h-4 w-4 mr-2" />Academy Training</Button></Link>
+
               {!userProfile?.profile_picture_url && (
                 <div>
-                  <input
-                    type="file"
-                    id="profile-picture-upload"
-                    accept=".jpg,.jpeg,.png"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) handleFileUpload(file, 'profile_picture');
-                    }}
-                  />
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start"
-                    onClick={() => document.getElementById('profile-picture-upload')?.click()}
-                  >
-                    <User className="h-4 w-4 mr-2" />
-                    Upload Profile Picture
+                  <input type="file" id="profile-picture-upload" accept=".jpg,.jpeg,.png" className="hidden" onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0], 'profile_picture')} />
+                  <Button variant="outline" className="w-full justify-start" onClick={() => document.getElementById('profile-picture-upload')?.click()}>
+                    <User className="h-4 w-4 mr-2" />Upload Profile Picture
                   </Button>
                 </div>
               )}
+
+              {/* INTRODUCTION VIDEO UPLOAD WITH DIALOG */}
               {!nannyProfile?.interview_video_url ? (
                 <div>
                   <input
@@ -544,73 +447,35 @@ Nanny Placements SA Team`,
                     id="intro-video-upload"
                     accept=".mp4,.avi,.mov"
                     className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) handleFileUpload(file, 'interview_video');
-                    }}
+                    onChange={(e) => e.target.files?.[0] && setPendingVideoFile(e.target.files[0])}
                   />
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start"
-                    onClick={() => document.getElementById('intro-video-upload')?.click()}
-                  >
-                    <Video className="h-4 w-4 mr-2" />
-                    Upload Introduction Video
+                  <Button variant="outline" className="w-full justify-start" onClick={openVideoDialog}>
+                    <Video className="h-4 w-4 mr-2" />Upload Introduction Video
                   </Button>
                 </div>
               ) : (
                 <div className="space-y-2">
                   <span className="text-sm font-medium">Introduction Video Uploaded</span>
-                  <video
-                    controls
-                    className="w-full max-h-32 rounded"
-                    src={nannyProfile.interview_video_url}
-                  >
+                  <video controls className="w-full max-h-32 rounded" src={nannyProfile.interview_video_url}>
                     Your browser does not support the video tag.
                   </video>
                 </div>
               )}
+
               {!nannyProfile?.criminal_check_url && (
                 <div>
-                  <input
-                    type="file"
-                    id="criminal-check-upload"
-                    accept=".pdf,.jpg,.jpeg,.png"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) handleFileUpload(file, 'criminal_check');
-                    }}
-                  />
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start"
-                    onClick={() => document.getElementById('criminal-check-upload')?.click()}
-                  >
-                    <Upload className="h-4 w-4 mr-2" />
-                    Upload Criminal Check
+                  <input type="file" id="criminal-check-upload" accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0], 'criminal_check')} />
+                  <Button variant="outline" className="w-full justify-start" onClick={() => document.getElementById('criminal-check-upload')?.click()}>
+                    <Upload className="h-4 w-4 mr-2" />Upload Criminal Check
                   </Button>
                 </div>
               )}
+
               {!nannyProfile?.credit_check_url && (
                 <div>
-                  <input
-                    type="file"
-                    id="credit-check-upload"
-                    accept=".pdf,.jpg,.jpeg,.png"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) handleFileUpload(file, 'credit_check');
-                    }}
-                  />
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start"
-                    onClick={() => document.getElementById('credit-check-upload')?.click()}
-                  >
-                    <Upload className="h-4 w-4 mr-2" />
-                    Upload Credit Check
+                  <input type="file" id="credit-check-upload" accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0], 'credit_check')} />
+                  <Button variant="outline" className="w-full justify-start" onClick={() => document.getElementById('credit-check-upload')?.click()}>
+                    <Upload className="h-4 w-4 mr-2" />Upload Credit Check
                   </Button>
                 </div>
               )}
@@ -694,6 +559,66 @@ Nanny Placements SA Team`,
           </Card>
         </div>
       </div>
+
+      {/* INTRODUCTION VIDEO INSTRUCTION DIALOG */}
+      <Dialog open={isVideoDialogOpen} onOpenChange={setIsVideoDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-xl flex items-center gap-2">
+              <Video className="h-6 w-6" />
+              Record Your Introduction Video
+            </DialogTitle>
+            <DialogDescription className="text-base pt-2">
+              Create a <strong>1 minute 30 seconds</strong> video answering these questions:
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4 text-left">
+            <ol className="list-decimal list-inside space-y-3 text-sm md:text-base">
+              <li><strong>Can you tell me a bit about your previous experience in being a nanny or cleaner?</strong></li>
+              <li><strong>What makes you different from other nannies or cleaners and why should we choose you?</strong></li>
+              <li>
+                <strong>How do you make sure children are safe in your care when looking after them?</strong>
+                <br />
+                <span className="text-muted-foreground text-sm">(Only answer if you are seeking a nanny job)</span>
+              </li>
+              <li><strong>How do you manage your time when cleaning or caring for children?</strong></li>
+            </ol>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-6">
+              <p className="text-sm font-medium text-blue-900">
+                Once you are done, upload the video on your profile to increase your chances of getting placed!
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter className="flex gap-3 sm:justify-between">
+            <Button variant="outline" onClick={closeVideoDialog}>Cancel</Button>
+            <div>
+              <input
+                type="file"
+                id="dialog-video-upload"
+                accept=".mp4,.avi,.mov"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    setPendingVideoFile(file);
+                    confirmVideoUpload();
+                  }
+                }}
+              />
+              <Button
+                onClick={() => document.getElementById('dialog-video-upload')?.click()}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                <Upload className="h-4 w-4 mr-2" />
+                I Understand – Upload Video Now
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

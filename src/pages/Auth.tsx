@@ -5,16 +5,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Heart, Shield } from "lucide-react";
+import { Heart, Shield, AlertTriangle } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useNavigate } from "react-router-dom";
-import { Badge } from "@/components/ui/badge";
+import { SOUTH_AFRICAN_CITIES } from '@/data/southAfricanCities';
 
 export default function Auth() {
   const { user, signIn, signUp } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
-  
+
   // Sign In Form
   const [signInData, setSignInData] = useState({
     email: '',
@@ -28,11 +28,13 @@ export default function Auth() {
     confirmPassword: '',
     firstName: '',
     lastName: '',
-    userType: ''
+    userType: '',
+    phone: '',
+    city: '',
+    town: ''
   });
 
   useEffect(() => {
-    // Redirect if already authenticated
     if (user) {
       navigate('/');
     }
@@ -41,12 +43,13 @@ export default function Auth() {
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    
+
     try {
       const { error } = await signIn(signInData.email, signInData.password);
-      if (!error) {
-        // Navigation will be handled by auth state change
-      }
+      if (error) throw error;
+    } catch (error) {
+      console.error('Sign in error:', error);
+      alert('Failed to sign in. Please check your email and password.');
     } finally {
       setLoading(false);
     }
@@ -54,33 +57,43 @@ export default function Auth() {
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (signUpData.password !== signUpData.confirmPassword) {
-      alert('Passwords do not match');
-      return;
-    }
 
-    if (!signUpData.userType) {
-      alert('Please select whether you are a family or nanny');
-      return;
-    }
+    // Validation
+    if (!signUpData.firstName.trim()) return alert('First Name is required.');
+    if (!signUpData.lastName.trim()) return alert('Last Name is required.');
+    if (!signUpData.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(signUpData.email))
+      return alert('Valid email required (e.g., your@email.com).');
+    if (!signUpData.phone.trim() || !/^\+27\d{9}$/.test(signUpData.phone.replace(/\s/g, '')))
+      return alert('Phone must be +27821234567 (no spaces).');
+    if (!signUpData.city) return alert('Please select a city.');
+    if (!signUpData.town.trim()) return alert('Please enter town/suburb.');
+    if (!signUpData.userType) return alert('Please select your role.');
+    if (signUpData.password.length < 6) return alert('Password must be 6+ characters.');
+    if (signUpData.password !== signUpData.confirmPassword)
+      return alert('Passwords do not match.');
 
     setLoading(true);
-    
+
     try {
       const { error } = await signUp(
-        signUpData.email, 
+        signUpData.email,
         signUpData.password,
         {
           first_name: signUpData.firstName,
           last_name: signUpData.lastName,
+          phone: signUpData.phone,
+          city: signUpData.city,
+          suburb: signUpData.town, // Matches 'suburb' in DB
           user_type: signUpData.userType
         }
       );
-      
-      if (!error) {
-        // Show success message and switch to sign in tab
-      }
+
+      if (error) throw error;
+
+      alert('Account created successfully! Please sign in.');
+    } catch (error: any) {
+      console.error('Sign up error:', error);
+      alert(`Failed to create account: ${error.message || 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
@@ -95,9 +108,7 @@ export default function Auth() {
             <Heart className="h-8 w-8 text-primary" />
             <span className="text-2xl font-bold">Nanny Placements SA</span>
           </div>
-          <p className="text-muted-foreground">
-            Connecting families with trusted nannies
-          </p>
+          <p className="text-muted-foreground">Connecting families with trusted nannies</p>
         </div>
 
         {/* Safety Notice */}
@@ -106,9 +117,7 @@ export default function Auth() {
             <div className="flex items-start gap-3">
               <Shield className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
               <div>
-                <p className="text-sm text-amber-800 font-medium mb-1">
-                  Safety Reminder
-                </p>
+                <p className="text-sm text-amber-800 font-medium mb-1">Safety Reminder</p>
                 <p className="text-xs text-amber-700">
                   Always meet in public places, verify documents independently, and trust your instincts.
                 </p>
@@ -122,14 +131,13 @@ export default function Auth() {
             <TabsTrigger value="signin">Sign In</TabsTrigger>
             <TabsTrigger value="signup">Sign Up</TabsTrigger>
           </TabsList>
-          
+
+          {/* Sign In */}
           <TabsContent value="signin">
             <Card>
               <CardHeader>
                 <CardTitle>Welcome Back</CardTitle>
-                <CardDescription>
-                  Sign in to your account to continue
-                </CardDescription>
+                <CardDescription>Sign in to your account to continue</CardDescription>
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleSignIn} className="space-y-4">
@@ -144,7 +152,6 @@ export default function Auth() {
                       required
                     />
                   </div>
-                  
                   <div className="space-y-2">
                     <Label htmlFor="signin-password">Password</Label>
                     <Input
@@ -155,29 +162,26 @@ export default function Auth() {
                       required
                     />
                   </div>
-                  
                   <Button type="submit" className="w-full" disabled={loading}>
                     {loading ? 'Signing In...' : 'Sign In'}
                   </Button>
                 </form>
-
               </CardContent>
             </Card>
           </TabsContent>
-          
+
+          {/* Sign Up */}
           <TabsContent value="signup">
             <Card>
               <CardHeader>
                 <CardTitle>Join Our Community</CardTitle>
-                <CardDescription>
-                  Create an account to get started
-                </CardDescription>
+                <CardDescription>Create an account to get started</CardDescription>
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleSignUp} className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="first-name">First Name</Label>
+                      <Label htmlFor="first-name">First Name <span className="text-red-600">*</span></Label>
                       <Input
                         id="first-name"
                         value={signUpData.firstName}
@@ -186,7 +190,7 @@ export default function Auth() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="last-name">Last Name</Label>
+                      <Label htmlFor="last-name">Last Name <span className="text-red-600">*</span></Label>
                       <Input
                         id="last-name"
                         value={signUpData.lastName}
@@ -195,9 +199,8 @@ export default function Auth() {
                       />
                     </div>
                   </div>
-                  
                   <div className="space-y-2">
-                    <Label htmlFor="signup-email">Email</Label>
+                    <Label htmlFor="signup-email">Email <span className="text-red-600">*</span></Label>
                     <Input
                       id="signup-email"
                       type="email"
@@ -207,12 +210,50 @@ export default function Auth() {
                       required
                     />
                   </div>
-
                   <div className="space-y-2">
-                    <Label htmlFor="user-type">I am a...</Label>
-                    <Select 
-                      value={signUpData.userType} 
+                    <Label htmlFor="phone">Phone Number <span className="text-red-600">*</span></Label>
+                    <Input
+                      id="phone"
+                      type="tel"
+                      placeholder="+27 82 123 4567"
+                      value={signUpData.phone}
+                      onChange={(e) => setSignUpData(prev => ({ ...prev, phone: e.target.value }))}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="city">City <span className="text-red-600">*</span></Label>
+                    <Select
+                      value={signUpData.city}
+                      onValueChange={(value) => setSignUpData(prev => ({ ...prev, city: value }))}
+                      required
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select your city" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {SOUTH_AFRICAN_CITIES.map((city) => (
+                          <SelectItem key={city} value={city}>{city}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="town">Town/Suburb <span className="text-red-600">*</span></Label>
+                    <Input
+                      id="town"
+                      placeholder="Enter your town or suburb"
+                      value={signUpData.town}
+                      onChange={(e) => setSignUpData(prev => ({ ...prev, town: e.target.value }))}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="user-type">I am a... <span className="text-red-600">*</span></Label>
+                    <Select
+                      value={signUpData.userType}
                       onValueChange={(value) => setSignUpData(prev => ({ ...prev, userType: value }))}
+                      required
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Select your role" />
@@ -223,9 +264,8 @@ export default function Auth() {
                       </SelectContent>
                     </Select>
                   </div>
-                  
                   <div className="space-y-2">
-                    <Label htmlFor="signup-password">Password</Label>
+                    <Label htmlFor="signup-password">Password <span className="text-red-600">*</span></Label>
                     <Input
                       id="signup-password"
                       type="password"
@@ -234,9 +274,8 @@ export default function Auth() {
                       required
                     />
                   </div>
-                  
                   <div className="space-y-2">
-                    <Label htmlFor="confirm-password">Confirm Password</Label>
+                    <Label htmlFor="confirm-password">Confirm Password <span className="text-red-600">*</span></Label>
                     <Input
                       id="confirm-password"
                       type="password"
@@ -245,12 +284,20 @@ export default function Auth() {
                       required
                     />
                   </div>
-                  
                   <Button type="submit" className="w-full" disabled={loading}>
                     {loading ? 'Creating Account...' : 'Create Account'}
                   </Button>
                 </form>
               </CardContent>
+
+              {/* Permanent Warning Banner */}
+              <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-md flex items-start gap-2 text-xs text-amber-800">
+                <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                <p>
+                  <strong>Important:</strong> The phone number, city, and town/suburb you enter are
+                  <strong> final</strong> and cannot be edited later. Please double-check before creating your account.
+                </p>
+              </div>
             </Card>
           </TabsContent>
         </Tabs>

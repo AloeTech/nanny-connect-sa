@@ -1,11 +1,8 @@
+// hooks/useAuth.ts
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-
-interface UserRole {
-  role: 'admin' | 'nanny' | 'client';
-}
 
 interface AuthContextType {
   user: User | null;
@@ -27,14 +24,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const { toast } = useToast();
 
   useEffect(() => {
-    // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
-        
+
         if (session?.user) {
-          // Fetch user role
           setTimeout(async () => {
             try {
               const { data: roles } = await supabase
@@ -42,7 +37,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 .select('role')
                 .eq('user_id', session.user.id)
                 .single();
-              
               setUserRole(roles?.role || null);
             } catch (error) {
               console.error('Error fetching user role:', error);
@@ -51,25 +45,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } else {
           setUserRole(null);
         }
-        
+
         setLoading(false);
       }
     );
 
-    // Check for existing session
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
-      
+
       if (session?.user) {
-        // Fetch user role for existing session
         try {
           const { data: roles } = await supabase
             .from('user_roles')
             .select('role')
             .eq('user_id', session.user.id)
             .single();
-          
           setUserRole(roles?.role || null);
         } catch (error) {
           console.error('Error fetching user role:', error);
@@ -77,7 +68,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else {
         setUserRole(null);
       }
-      
+
       setLoading(false);
     });
 
@@ -85,7 +76,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const cleanupAuthState = () => {
-    // Remove all auth-related keys
     Object.keys(localStorage).forEach((key) => {
       if (key.startsWith('supabase.auth.') || key.includes('sb-')) {
         localStorage.removeItem(key);
@@ -93,51 +83,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
+  // SIGNUP → CALL EDGE FUNCTION + TRIGGER CONFIRMATION EMAIL
   const signUp = async (email: string, password: string, metadata?: any) => {
     try {
       cleanupAuthState();
-      
-      const redirectUrl = `${window.location.origin}/`;
-      
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: redirectUrl,
-          data: metadata
+
+      const { data, error } = await supabase.functions.invoke('signup-with-role', {
+        body: {
+          email,
+          password,
+          first_name: metadata?.first_name,
+          last_name: metadata?.last_name,
+          phone: metadata?.phone,
+          city: metadata?.city,
+          suburb: metadata?.suburb,
+          user_type: metadata?.user_type,
+          send_confirmation: true,           // TRIGGER CONFIRMATION EMAIL
+          redirect_to: `${window.location.origin}/`
         }
       });
-      
-      if (error) {
+
+      if (error || !data?.success) {
+        const message = error?.message || data?.error || 'Failed to create account';
         toast({
           title: "Sign Up Error",
-          description: error.message,
+          description: message,
           variant: "destructive"
         });
-      } else {
-        toast({
-          title: "Success",
-          description: "Please check your email to confirm your account.",
-          variant: "default"
-        });
-
-        // Send welcome email with terms and privacy info
-        setTimeout(() => {
-          const userType = metadata?.user_type;
-          if (userType) {
-            supabase.functions.invoke('send-notification', {
-              body: {
-                to: email,
-                subject: 'Welcome to Nanny Placements SA',
-                message: `Welcome! Your account has been created successfully.`,
-                type: `welcome_${userType}`
-              }
-            }).catch(console.error);
-          }
-        }, 1000);
+        return { error: new Error(message) };
       }
-      
-      return { error };
+
+      // SHOW "CHECK EMAIL" TOAST
+      toast({
+        title: "Check Your Email",
+        description: "Please confirm your email to complete your profile.",
+        variant: "default"
+      });
+
+      return { error: null };
     } catch (error: any) {
       toast({
         title: "Sign Up Error",
@@ -151,18 +134,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signIn = async (email: string, password: string) => {
     try {
       cleanupAuthState();
-      
+
       try {
         await supabase.auth.signOut({ scope: 'global' });
-      } catch (err) {
-        // Continue even if this fails
-      }
-      
+      } catch (err) {}
+
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
-      
+
       if (error) {
         toast({
           title: "Sign In Error",
@@ -174,10 +155,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           title: "Welcome back!",
           description: "You have successfully signed in.",
         });
-        // Force page reload for clean state
         window.location.href = '/';
       }
-      
+
       return { error };
     } catch (error: any) {
       toast({
@@ -192,20 +172,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signOut = async () => {
     try {
       cleanupAuthState();
-      
+
       try {
         await supabase.auth.signOut({ scope: 'global' });
-      } catch (err) {
-        // Continue even if this fails
-      }
-      
+      } catch (err) {}
+
       toast({
         title: "Signed Out",
         description: "You have been successfully signed out.",
       });
-      
-      // Force page reload for clean state
-      window.location.href = '/';
+
+      window.location.href = '/auth';
     } catch (error: any) {
       toast({
         title: "Sign Out Error",

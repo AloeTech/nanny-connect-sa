@@ -147,7 +147,7 @@ export default function TermsOfService() {
                 <li>We recommend independent verification of all information</li>
                 <li>Employment contracts are between families and nannies directly</li>
                 <li>Platform liability is limited to the placement fee paid</li>
-                <li>Users should maintain appropriate insurance coverage</li>
+                
               </ul>
             </CardContent>
           </Card>
@@ -211,7 +211,7 @@ export default function TermsOfService() {
                 If you have any questions about these Terms of Service, please contact us:
               </p>
               <div className="space-y-2 text-muted-foreground">
-                <p><strong>Email:</strong> legal@nannyplacementssa.co.za</p>
+                <p><strong>Email:</strong> admin@nannyplacementssa.co.za</p>
                 <p><strong>Phone:</strong> +27 (0) 11 123 4567</p>
                 <p><strong>Address:</strong> Johannesburg, South Africa</p>
               </div>

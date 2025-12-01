@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import emailjs from '@emailjs/browser';
 
 interface NannyProfile {
+  proof_of_residence_status: string;
   id: string;
   user_id: string;
   bio: string;
@@ -131,7 +132,12 @@ export default function AdminPanel() {
         `)
         .order('created_at', { ascending: false });
 
-      setNannies(nanniesData || []);
+      const normalizedNannies = (nanniesData || []).map(nanny => ({
+  ...nanny,
+  proof_of_residence_status: nanny.proof_of_residence_url || 'pending'
+}));
+
+setNannies(normalizedNannies);
 
       // Fetch academy videos
       const { data: videosData } = await supabase
@@ -727,7 +733,7 @@ Nanny Placements SA Team`,
                                     size="sm"
                                     variant="outline"
                                     onClick={() => updateDocumentStatus(nanny.id, 'credit_check_status', 'approved')}
-                                    disabled={nanny.criminal_check_status === 'approved'}
+                                    disabled={nanny.credit_check_status === 'approved'}
                                   >
                                     <CheckCircle className="h-4 w-4 mr-2" />
                                     Approve
@@ -739,61 +745,83 @@ Nanny Placements SA Team`,
 
                           {/* Proof of Residence */}
                           <Card className="p-4">
-                            <div className="flex items-center gap-2 mb-2">
-                              <FileText className="h-5 w-5 text-muted-foreground" />
-                              <span className="font-medium">Proof of Residence</span>
-                            </div>
-                            <div className="flex flex-col sm:flex-row gap-4 items-start">
-                              <div className="w-full sm:w-48">
-                                {nanny.proof_of_residence_url ? (
-                                  isImageFile(nanny.proof_of_residence_url) ? (
-                                    <img
-                                      src={nanny.proof_of_residence_url}
-                                      alt="Proof of Residence Preview"
-                                      className="w-full h-32 object-contain rounded border bg-gray-50"
-                                      onError={() => toast({
-                                        title: "Image preview failed",
-                                        description: "Unable to load proof of residence image. Try viewing externally.",
-                                        variant: "destructive"
-                                      })}
-                                    />
-                                  ) : (
-                                    <iframe
-                                      src={nanny.proof_of_residence_url}
-                                      title="Proof of Residence Preview"
-                                      className="w-full h-32 rounded border"
-                                      onError={() => toast({
-                                        title: "PDF preview failed",
-                                        description: "Unable to load proof of residence PDF. Try viewing externally.",
-                                        variant: "destructive"
-                                      })}
-                                    />
-                                  )
-                                ) : (
-                                  <div className="w-full h-32 flex items-center justify-center bg-gray-100 rounded border">
-                                    <span className="text-sm text-muted-foreground">Not Uploaded</span>
-                                  </div>
-                                )}
-                              </div>
-                              <div className="flex-1 space-y-2">
-                                <Badge
-                                  variant={nanny.proof_of_residence_url ? 'secondary' : 'outline'}
-                                >
-                                  {nanny.proof_of_residence_url ? 'Uploaded' : 'Not Uploaded'}
-                                </Badge>
-                                {nanny.proof_of_residence_url && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => window.open(nanny.proof_of_residence_url, '_blank')}
-                                  >
-                                    <Eye className="h-4 w-4 mr-2" />
-                                    View Externally
-                                  </Button>
-                                )}
-                              </div>
-                            </div>
-                          </Card>
+  <div className="flex items-center gap-2 mb-2">
+    <FileText className="h-5 w-5 text-muted-foreground" />
+    <span className="font-medium">Proof of Residence</span>
+  </div>
+  <div className="flex flex-col sm:flex-row gap-4 items-start">
+    <div className="w-full sm:w-48">
+      {nanny.proof_of_residence_url ? (
+        isImageFile(nanny.proof_of_residence_url) ? (
+          <img
+            src={nanny.proof_of_residence_url}
+            alt="Proof of Residence Preview"
+            className="w-full h-32 object-contain rounded border bg-gray-50"
+            onError={() => toast({
+              title: "Image preview failed",
+              description: "Unable to load proof of residence image. Try viewing externally.",
+              variant: "destructive"
+            })}
+          />
+        ) : (
+          <iframe
+            src={nanny.proof_of_residence_url}
+            title="Proof of Residence Preview"
+            className="w-full h-32 rounded border"
+            onError={() => toast({
+              title: "PDF preview failed",
+              description: "Unable to load proof of residence PDF. Try viewing externally.",
+              variant: "destructive"
+            })}
+          />
+        )
+      ) : (
+        <div className="w-full h-32 flex items-center justify-center bg-gray-100 rounded border">
+          <span className="text-sm text-muted-foreground">Not Uploaded</span>
+        </div>
+      )}
+    </div>
+    <div className="flex-1 space-y-2">
+      <Badge
+        variant={
+          nanny.proof_of_residence_status === 'approved'  // You'll need to add this field to your database
+            ? 'default'
+            : nanny.proof_of_residence_url
+            ? 'secondary'
+            : 'outline'
+        }
+        className={nanny.proof_of_residence_status === 'approved' ? 'bg-green-500' : ''}
+      >
+        {nanny.proof_of_residence_status === 'approved'
+          ? 'Approved'
+          : nanny.proof_of_residence_url
+          ? 'Pending'
+          : 'Not Uploaded'}
+      </Badge>
+      {nanny.proof_of_residence_url && (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => window.open(nanny.proof_of_residence_url, '_blank')}
+        >
+          <Eye className="h-4 w-4 mr-2" />
+          View Externally
+        </Button>
+      )}
+      {nanny.proof_of_residence_url && nanny.proof_of_residence_status !== 'approved' && (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => updateDocumentStatus(nanny.id, 'proof_of_residence_status', 'approved')}
+          disabled={nanny.proof_of_residence_status === 'approved'}
+        >
+          <CheckCircle className="h-4 w-4 mr-2" />
+          Approve
+        </Button>
+      )}
+    </div>
+  </div>
+</Card>
 
                           {/* Interview Video */}
                           <Card className="p-4">

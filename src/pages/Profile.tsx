@@ -235,55 +235,138 @@ export default function Profile() {
     }
   };
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>, fileType: 'proof_of_residence' | 'interview_video' | 'criminal_check' | 'credit_check') => {
+  // Fixed introduction video upload function
+  const handleInterviewVideoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file || !nannyProfile) return;
 
     // Validate file type
-    const validTypes = fileType === 'interview_video' 
-      ? ['video/mp4', 'video/quicktime', 'video/webm'] 
-      : ['application/pdf', 'image/jpeg', 'image/png'];
-    if (!validTypes.includes(file.type)) {
+    const validVideoTypes = ['video/mp4', 'video/quicktime', 'video/webm', 'video/avi'];
+    if (!validVideoTypes.includes(file.type)) {
       toast({
         title: "Invalid file type",
-        description: fileType === 'interview_video' 
-          ? "Please upload a video file (MP4, MOV, or WebM)."
-          : "Please upload a PDF, JPEG, or PNG file.",
+        description: "Please upload a video file (MP4, MOV, WebM, or AVI).",
         variant: "destructive"
       });
       return;
     }
 
-    // Validate video duration for interview_video
-    if (fileType === 'interview_video') {
-      const video = document.createElement('video');
-      video.src = URL.createObjectURL(file);
-      await new Promise<void>((resolve) => {
-        video.onloadedmetadata = () => {
-          if (video.duration > 300) { // Limit to 5 minutes
-            toast({
-              title: "Video too long",
-              description: "Please upload a video shorter than 5 minutes.",
-              variant: "destructive"
-            });
-            return;
-          }
-          resolve();
-        };
+    // Check file size (max 50MB)
+    if (file.size > 50 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Please upload a video smaller than 50MB.",
+        variant: "destructive"
       });
+      return;
     }
 
-    setUploading(prev => ({ ...prev, [fileType === 'proof_of_residence' ? 'proof' : fileType === 'interview_video' ? 'video' : fileType === 'criminal_check' ? 'criminal' : 'credit']: true }));
+    setUploading(prev => ({ ...prev, video: true }));
+    
+    try {
+      // Get file extension and create unique filename
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user?.id}/interview_video-${Date.now()}.${fileExt}`;
+      const bucketName = 'interview-videos';
+
+      // Upload to Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from(bucketName)
+        .upload(fileName, file, {
+          cacheControl: '3600',
+          upsert: true
+        });
+
+      if (uploadError) {
+        console.error('Upload error details:', uploadError);
+        throw new Error(`Upload failed: ${uploadError.message}`);
+      }
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from(bucketName)
+        .getPublicUrl(fileName);
+      
+      const publicUrl = urlData.publicUrl;
+
+      // Update nanny profile with the video URL
+      const { error: updateError } = await supabase
+        .from('nannies')
+        .update({ 
+          interview_video_url: publicUrl 
+        })
+        .eq('user_id', user?.id);
+
+      if (updateError) throw updateError;
+
+      // Update local state
+      setNannyProfile(prev => prev ? { 
+        ...prev, 
+        interview_video_url: publicUrl 
+      } : null);
+
+      toast({
+        title: "Success!",
+        description: "Introduction video uploaded successfully.",
+      });
+
+    } catch (error: any) {
+      console.error('Video upload error:', error);
+      toast({
+        title: "Upload failed",
+        description: error.message || "There was an error uploading your video. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setUploading(prev => ({ ...prev, video: false }));
+      // Clear the file input
+      event.target.value = '';
+    }
+  };
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>, fileType: 'proof_of_residence' | 'criminal_check' | 'credit_check') => {
+    const file = event.target.files?.[0];
+    if (!file || !nannyProfile) return;
+
+    // Validate file type for documents
+    const validTypes = ['application/pdf', 'image/jpeg', 'image/png'];
+    if (!validTypes.includes(file.type)) {
+      toast({
+        title: "Invalid file type",
+        description: "Please upload a PDF, JPEG, or PNG file.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Check file size (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Please upload a file smaller than 10MB.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const uploadingKey = fileType === 'proof_of_residence' ? 'proof' : 
+                        fileType === 'criminal_check' ? 'criminal' : 'credit';
+    
+    setUploading(prev => ({ ...prev, [uploadingKey]: true }));
+    
     try {
       const fileExt = file.name.split('.').pop();
-      const fileName = `${user?.id}/${fileType}-${Date.now()}.${fileExt}`; // Add timestamp to avoid overwrite
-      const bucket = fileType === 'interview_video' ? 'interview-videos' : 
-                    fileType === 'proof_of_residence' ? 'proof-of-residence' :
+      const fileName = `${user?.id}/${fileType}-${Date.now()}.${fileExt}`;
+      
+      const bucket = fileType === 'proof_of_residence' ? 'proof-of-residence' :
                     fileType === 'criminal_check' ? 'criminal-checks' : 'credit-checks';
 
       const { error: uploadError } = await supabase.storage
         .from(bucket)
-        .upload(fileName, file, { upsert: true });
+        .upload(fileName, file, { 
+          cacheControl: '3600',
+          upsert: true 
+        });
 
       if (uploadError) throw uploadError;
 
@@ -292,7 +375,7 @@ export default function Profile() {
         .getPublicUrl(fileName);
       const publicUrl = data.publicUrl;
 
-      const updateData: Partial<NannyProfile> = { [fileType]: publicUrl };
+      const updateData: any = { [fileType]: publicUrl };
       if (fileType === 'criminal_check') {
         updateData.criminal_check_status = 'pending';
       } else if (fileType === 'credit_check') {
@@ -310,7 +393,7 @@ export default function Profile() {
 
       toast({
         title: "File uploaded successfully",
-        description: fileType === 'interview_video' ? "Your introduction video has been uploaded." : `Your ${fileType.replace('_', ' ')} has been uploaded.`,
+        description: `Your ${fileType.replace('_', ' ')} has been uploaded.`,
       });
     } catch (error: any) {
       console.error('Upload error:', error);
@@ -320,7 +403,8 @@ export default function Profile() {
         variant: "destructive"
       });
     } finally {
-      setUploading(prev => ({ ...prev, [fileType === 'proof_of_residence' ? 'proof' : fileType === 'interview_video' ? 'video' : fileType === 'criminal_check' ? 'criminal' : 'credit']: false }));
+      setUploading(prev => ({ ...prev, [uploadingKey]: false }));
+      event.target.value = '';
     }
   };
 
@@ -518,8 +602,8 @@ export default function Profile() {
                       <input
                         type="file"
                         id="interview_video"
-                        accept="video/mp4,video/quicktime,video/webm"
-                        onChange={(e) => handleFileUpload(e, 'interview_video')}
+                        accept="video/mp4,video/quicktime,video/webm,video/avi"
+                        onChange={handleInterviewVideoUpload}
                         className="hidden"
                         disabled={uploading.video}
                       />
@@ -529,49 +613,47 @@ export default function Profile() {
                           {uploading.video ? 'Uploading...' : 'Click to upload introduction video'}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          MP4 recommended, MOV or WebM also accepted, up to 50MB
+                          MP4, MOV, WebM, or AVI accepted, up to 50MB
                         </p>
                       </label>
                       {nannyProfile.interview_video_url && (
-                        <div className="mt-2">
-                          <p className="text-sm text-green-600">✓ Video uploaded</p>
-                          <video
-                            controls
-                            src={nannyProfile.interview_video_url}
-                            onError={(e) => {
-                              console.error('Video playback error:', e, 'URL:', nannyProfile.interview_video_url);
-                              fetch(nannyProfile.interview_video_url, { method: 'HEAD' })
-                                .then(response => console.log('Video MIME type:', response.headers.get('content-type')))
-                                .catch(err => console.error('Fetch error:', err));
-                              toast({
-                                title: "Video playback failed",
-                                description: "The video could not be played. Try downloading it or using a different browser.",
-                                variant: "destructive"
-                              });
-                            }}
-                            width="100%"
-                            style={{ maxHeight: '400px' }}
-                          >
-                            <source src={nannyProfile.interview_video_url} type="video/mp4" />
-                            <source src={nannyProfile.interview_video_url} type="video/quicktime" />
-                            <source src={nannyProfile.interview_video_url} type="video/webm" />
-                            Your browser does not support the video tag.
-                          </video>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => window.open(nannyProfile.interview_video_url, '_blank')}
-                            className="mt-2"
-                          >
-                            <Eye className="h-3 w-3 mr-1" />
-                            View Externally
-                          </Button>
+                        <div className="mt-4">
+                          <p className="text-sm text-green-600 mb-2">✓ Introduction video uploaded</p>
+                          <div className="relative">
+                            <video
+                              controls
+                              src={nannyProfile.interview_video_url}
+                              className="w-full max-h-64 rounded-lg"
+                              preload="metadata"
+                            >
+                              Your browser does not support the video tag.
+                            </video>
+                            <div className="flex gap-2 mt-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => window.open(nannyProfile.interview_video_url, '_blank')}
+                              >
+                                <Eye className="h-3 w-3 mr-1" />
+                                View in new tab
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  // Remove video
+                                  setNannyProfile(prev => prev ? {...prev, interview_video_url: ''} : null);
+                                  toast({
+                                    title: "Video removed",
+                                    description: "You can upload a new introduction video.",
+                                  });
+                                }}
+                              >
+                                Remove video
+                              </Button>
+                            </div>
+                          </div>
                         </div>
-                      )}
-                      {nannyProfile.interview_video_url && (
-                        <p className="text-sm text-yellow-600 mt-2">
-                          If the video doesn't play, ensure it's in MP4 format and try Chrome or Firefox.
-                        </p>
                       )}
                     </div>
                   </div>

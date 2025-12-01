@@ -6,11 +6,18 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Heart, MapPin, CheckCircle, X, Eye } from "lucide-react";
+import { Heart, MapPin, CheckCircle, X, Eye, CreditCard } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import emailjs from '@emailjs/browser';
+
+// Initialize Flutterwave script
+declare global {
+  interface Window {
+    FlutterwaveCheckout: any;
+  }
+}
 
 interface Nanny {
   id: string;
@@ -41,6 +48,7 @@ interface Nanny {
     town: string | null;
     profile_picture_url: string | null;
     email: string;
+    phone?: string | null;
   };
 }
 
@@ -124,8 +132,21 @@ export default function FindNanny() {
   const [sendingInterest, setSendingInterest] = useState(false);
   const [existingInterests, setExistingInterests] = useState<Interest[]>([]);
   const [refreshCount, setRefreshCount] = useState(0);
+  const [processingPayment, setProcessingPayment] = useState<string | null>(null);
 
   const hasRole = userRole === 'client';
+
+  useEffect(() => {
+    // Load Flutterwave script
+    const script = document.createElement('script');
+    script.src = 'https://checkout.flutterwave.com/v3.js';
+    script.async = true;
+    document.body.appendChild(script);
+
+    return () => {
+      document.body.removeChild(script);
+    };
+  }, []);
 
   useEffect(() => {
     fetchNannies();
@@ -167,7 +188,8 @@ export default function FindNanny() {
             suburb,
             town,
             profile_picture_url,
-            email
+            email,
+            phone
           )
         `);
 
@@ -259,13 +281,23 @@ export default function FindNanny() {
     return !existingInterest || existingInterest.status === 'declined';
   };
 
-  const getInterestStatusForNanny = (nannyId: string): string | null => {
+  const getInterestStatusForNanny = (nannyId: string): Interest | null => {
     const interest = existingInterests.find(i => i.nanny_id === nannyId);
-    return interest ? interest.status : null;
+    return interest || null;
   };
 
   const hasInterestForNanny = (nannyId: string): boolean => {
     return existingInterests.some(i => i.nanny_id === nannyId);
+  };
+
+  // Check if interest is approved by nanny (either through status or nanny_response)
+  const isInterestApprovedByNanny = (interest: Interest | null): boolean => {
+    if (!interest) return false;
+    
+    // Check multiple approval indicators
+    return interest.status === 'approved' || 
+           interest.nanny_response === 'approved' || 
+           interest.admin_approved === true;
   };
 
   const handleExpressInterest = async () => {
@@ -397,6 +429,214 @@ export default function FindNanny() {
       });
     } finally {
       setSendingInterest(false);
+    }
+  };
+
+  // Create payment record in payments table
+  const createPaymentRecord = async (clientId: string, nannyId: string, interestId: string, transactionId: string) => {
+    try {
+      const { error } = await supabase
+        .from('payments')
+        .insert({
+          client_id: clientId,
+          nanny_id: nannyId,
+          interest_id: interestId,
+          amount: 200.00,
+          status: 'completed',
+          payment_method: 'flutterwave',
+          transaction_id: transactionId,
+          created_at: new Date().toISOString()
+        });
+
+      if (error) {
+        console.error('Error creating payment record:', error);
+        throw error;
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Failed to create payment record:', error);
+      throw error;
+    }
+  };
+
+  // Send email after successful payment
+  const sendPaymentSuccessEmail = async (clientProfile: any, nanny: Nanny) => {
+    try {
+      const emailParams = {
+        serviceID: "service_syqn4ol",
+        templateID: "template_exkrbne",
+        publicKey: "rK97vwvxnXTTY8PjW",
+        templateParams: {
+          name: `${clientProfile?.first_name} ${clientProfile?.last_name || ''}`,
+          email: clientProfile?.email || user?.email || "",
+          subject: 'Nanny Contact Details Unlocked - Nanny Placements SA',
+          message: `Congratulations! You have successfully unlocked ${nanny.profiles.first_name} ${nanny.profiles.last_name || ''}'s contact details.\n\nNanny Information:\n- Name: ${nanny.profiles.first_name} ${nanny.profiles.last_name || ''}\n- Email: ${nanny.profiles.email}\n- Phone: ${nanny.profiles.phone || 'Not provided'}\n\nPlease contact the nanny directly to schedule an interview. We recommend:\n1. Call or message to introduce yourself\n2. Schedule a meeting time\n3. Discuss your requirements and expectations\n\nBest regards,\nNanny Placements SA Team`,
+          to_email: clientProfile?.email || user?.email || "",
+        }
+      };
+
+      await emailjs.send(emailParams.serviceID, emailParams.templateID, emailParams.templateParams, emailParams.publicKey);
+      console.log('Payment success email sent successfully');
+      return true;
+    } catch (emailError) {
+      console.error('Error sending payment success email:', emailError);
+      // Don't fail the payment if email fails, but log it
+      return false;
+    }
+  };
+
+  // Flutterwave payment function for individual nanny
+  const handlePayment = async (nanny: Nanny, interestId: string) => {
+    if (!window.FlutterwaveCheckout) {
+      toast({
+        title: "Payment Error",
+        description: "Payment system is not available. Please try again later.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setProcessingPayment(nanny.id);
+    
+    try {
+      // Get client info
+      const { data: clientData } = await supabase
+        .from('clients')
+        .select('id')
+        .eq('user_id', user?.id)
+        .single();
+
+      if (!clientData) {
+        toast({
+          title: "Client Error",
+          description: "Client information not found.",
+          variant: "destructive"
+        });
+        setProcessingPayment(null);
+        return;
+      }
+
+      // Get client profile info
+      const { data: clientProfile } = await supabase
+        .from('profiles')
+        .select('first_name, last_name, email, phone')
+        .eq('id', user?.id)
+        .single();
+
+      const flutterwavePublicKey = import.meta.env.VITE_FLUTTERWAVE_PUBLIC_KEY;
+      
+      if (!flutterwavePublicKey) {
+        toast({
+          title: "Configuration Error",
+          description: "Payment gateway not configured properly.",
+          variant: "destructive"
+        });
+        setProcessingPayment(null);
+        return;
+      }
+
+      window.FlutterwaveCheckout({
+        public_key: flutterwavePublicKey,
+        tx_ref: `nanny-${interestId}-${Date.now()}`,
+        amount: 200,
+        currency: "ZAR",
+        payment_options: "card, mobilemoneyghana, ussd",
+        redirect_url: window.location.href,
+        customer: {
+          email: clientProfile?.email || user?.email || "",
+          phone_number: clientProfile?.phone || "",
+          name: `${clientProfile?.first_name} ${clientProfile?.last_name}` || "Client",
+        },
+        customizations: {
+          title: "Nanny Placements SA",
+          description: `Payment to unlock ${nanny.profiles.first_name}'s contact details`,
+          logo: "https://your-logo-url.com/logo.png",
+        },
+        callback: async (response: any) => {
+          console.log('Payment response:', response);
+          
+          if (response.status === "successful") {
+            try {
+              // Start a transaction: update interest and create payment record
+              const transactionId = response.transaction_id || response.tx_ref;
+              
+              // Update payment status in interests table
+              const { error: updateError } = await supabase
+                .from('interests')
+                .update({ 
+                  payment_status: 'completed',
+                  status: 'approved'
+                })
+                .eq('id', interestId);
+
+              if (updateError) {
+                console.error('Error updating interest payment status:', updateError);
+                toast({
+                  title: "Database Error",
+                  description: "Payment was successful but there was an error updating interest record.",
+                  variant: "destructive"
+                });
+                return;
+              }
+
+              // Create payment record in payments table
+              const paymentCreated = await createPaymentRecord(
+                clientData.id,
+                nanny.id,
+                interestId,
+                transactionId
+              );
+
+              if (!paymentCreated) {
+                toast({
+                  title: "Payment Record Error",
+                  description: "Payment was successful but there was an error creating payment record.",
+                  variant: "destructive"
+                });
+                return;
+              }
+
+              // Send email to client with nanny contact details
+              const emailSent = await sendPaymentSuccessEmail(clientProfile, nanny);
+
+              toast({
+                title: "Payment Successful!",
+                description: `${nanny.profiles.first_name}'s contact details have been unlocked. ${emailSent ? 'Check your email for contact information.' : 'Please contact support for nanny contact details.'}`,
+              });
+
+              // Refresh interests
+              fetchExistingInterests();
+            } catch (dbError) {
+              console.error('Database operation error:', dbError);
+              toast({
+                title: "Database Error",
+                description: "Payment was successful but there was an error updating records. Please contact support.",
+                variant: "destructive"
+              });
+            }
+          } else {
+            toast({
+              title: "Payment Failed",
+              description: "Payment was not successful. Please try again.",
+              variant: "destructive"
+            });
+          }
+          setProcessingPayment(null);
+        },
+        onclose: () => {
+          console.log('Payment modal closed');
+          setProcessingPayment(null);
+        }
+      });
+    } catch (error) {
+      console.error('Payment initialization error:', error);
+      toast({
+        title: "Payment Error",
+        description: "An error occurred during payment processing.",
+        variant: "destructive"
+      });
+      setProcessingPayment(null);
     }
   };
 
@@ -707,131 +947,160 @@ export default function FindNanny() {
       </Card>
 
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredNannies.map((nanny) => (
-          <Card key={nanny.id} className="hover:shadow-lg transition-shadow">
-            <CardContent className="p-6">
-              <div className="flex items-center gap-4 mb-4">
-                {nanny.profiles.profile_picture_url ? (
-                  <img 
-                    src={nanny.profiles.profile_picture_url}
-                    alt="Profile"
-                    className="w-16 h-16 rounded-full object-cover"
-                  />
-                ) : (
-                  <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
-                    <Heart className="h-8 w-8 text-primary" />
-                  </div>
-                )}
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold">{nanny.profiles.first_name || ''} {nanny.profiles.last_name || ''}</h3>
-                  <p className="text-sm text-muted-foreground flex items-center gap-1">
-                    <MapPin className="h-3 w-3" />
-                    {nanny.profiles.city || ''}{nanny.profiles.town ? `, ${nanny.profiles.town}` : ''}
-                  </p>
-                  {nanny.date_of_birth && (
-                    <p className="text-xs text-muted-foreground">
-                      Age: {calculateAge(nanny.date_of_birth)} years
-                    </p>
-                  )}
-                  {nanny.accommodation_preference && (
-                    <p className="text-xs text-muted-foreground capitalize">
-                      {nanny.accommodation_preference.replace('_', ' ')} • {nanny.employment_type?.replace('_', ' ') || ''}
-                    </p>
-                  )}
-                </div>
-              </div>
+        {filteredNannies.map((nanny) => {
+          const interest = getInterestStatusForNanny(nanny.id);
+          const isApproved = interest ? isInterestApprovedByNanny(interest) : false;
+          const isPaid = interest?.payment_status === 'completed';
+          const hasInterest = !!interest;
 
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-xl font-semibold">{nanny.profiles.first_name || ''} {nanny.profiles.last_name || ''}</h3>
-                  <p className="text-muted-foreground">
-                    {nanny.profiles.city || ''}{nanny.profiles.town ? `, ${nanny.profiles.town}` : ''}
-                  </p>
-                  {nanny.date_of_birth && (
+          return (
+            <Card key={nanny.id} className="hover:shadow-lg transition-shadow">
+              <CardContent className="p-6">
+                <div className="flex items-center gap-4 mb-4">
+                  {nanny.profiles.profile_picture_url ? (
+                    <img 
+                      src={nanny.profiles.profile_picture_url}
+                      alt="Profile"
+                      className="w-16 h-16 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
+                      <Heart className="h-8 w-8 text-primary" />
+                    </div>
+                  )}
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold">{nanny.profiles.first_name || ''}</h3>
+                    <p className="text-sm text-muted-foreground flex items-center gap-1">
+                      <MapPin className="h-3 w-3" />
+                      {nanny.profiles.city || ''}{nanny.profiles.town ? `, ${nanny.profiles.town}` : ''}
+                    </p>
+                    {nanny.date_of_birth && (
+                      <p className="text-xs text-muted-foreground">
+                        Age: {calculateAge(nanny.date_of_birth)} years
+                      </p>
+                    )}
+                    {nanny.accommodation_preference && (
+                      <p className="text-xs text-muted-foreground capitalize">
+                        {nanny.accommodation_preference.replace('_', ' ')} • {nanny.employment_type?.replace('_', ' ') || ''}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-xl font-semibold">{nanny.profiles.first_name || ''} </h3>
+                    <p className="text-muted-foreground">
+                      {nanny.profiles.city || ''}{nanny.profiles.town ? `, ${nanny.profiles.town}` : ''}
+                    </p>
+                    {nanny.date_of_birth && (
+                      <p className="text-sm text-muted-foreground">
+                        Age: {calculateAge(nanny.date_of_birth)} years • 
+                        {nanny.accommodation_preference && (
+                          <span className="capitalize ml-1">
+                            {nanny.accommodation_preference.replace('_', ' ')} • {nanny.employment_type?.replace('_', ' ') || ''}
+                          </span>
+                        )}
+                      </p>
+                    )}
                     <p className="text-sm text-muted-foreground">
-                      Age: {calculateAge(nanny.date_of_birth)} years • 
-                      {nanny.accommodation_preference && (
-                        <span className="capitalize ml-1">
-                          {nanny.accommodation_preference.replace('_', ' ')} • {nanny.employment_type?.replace('_', ' ') || ''}
-                        </span>
-                      )}
+                      {getExperienceLabel(nanny.experience_duration)} - {nanny.experience_type}
                     </p>
-                  )}
-                  <p className="text-sm text-muted-foreground">
-                    {getExperienceLabel(nanny.experience_duration)} - {nanny.experience_type}
-                  </p>
+                  </div>
+                  <div className="text-right">
+                  
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {nanny.academy_completed && (
+                        <Badge variant="secondary">Academy Complete</Badge>
+                      )}
+                      {nanny.criminal_check_status === 'approved' && (
+                        <Badge variant="default">Criminal Check ✓</Badge>
+                      )}
+                      {nanny.credit_check_status === 'approved' && (
+                        <Badge variant="default">Credit Check ✓</Badge>
+                      )}
+                      {nanny.profile_approved && (
+                        <Badge variant="default">Profile Verified</Badge>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-lg font-bold">R{nanny.hourly_rate || 0}/hour</p>
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {nanny.academy_completed && (
-                      <Badge variant="secondary">Academy Complete</Badge>
-                    )}
-                    {nanny.criminal_check_status === 'approved' && (
-                      <Badge variant="default">Criminal Check ✓</Badge>
-                    )}
-                    {nanny.credit_check_status === 'approved' && (
-                      <Badge variant="default">Credit Check ✓</Badge>
-                    )}
-                    {nanny.profile_approved && (
-                      <Badge variant="default">Profile Verified</Badge>
+
+                {nanny.bio && (
+                  <p className="text-sm text-muted-foreground mt-3 line-clamp-2">
+                    {nanny.bio}
+                  </p>
+                )}
+
+                <div className="mt-3">
+                  <p className="text-sm font-medium mb-1">Languages:</p>
+                  <div className="flex flex-wrap gap-1">
+                    {(nanny.languages || []).slice(0, 3).map((lang, index) => (
+                      <Badge key={index} variant="outline" className="text-xs">
+                        {lang}
+                      </Badge>
+                    ))}
+                    {(nanny.languages || []).length > 3 && (
+                      <Badge variant="outline" className="text-xs">
+                        +{(nanny.languages || []).length - 3} more
+                      </Badge>
                     )}
                   </div>
                 </div>
-              </div>
 
-              {nanny.bio && (
-                <p className="text-sm text-muted-foreground mt-3 line-clamp-2">
-                  {nanny.bio}
-                </p>
-              )}
-
-              <div className="mt-3">
-                <p className="text-sm font-medium mb-1">Languages:</p>
-                <div className="flex flex-wrap gap-1">
-                  {(nanny.languages || []).slice(0, 3).map((lang, index) => (
-                    <Badge key={index} variant="outline" className="text-xs">
-                      {lang}
-                    </Badge>
-                  ))}
-                  {(nanny.languages || []).length > 3 && (
-                    <Badge variant="outline" className="text-xs">
-                      +{(nanny.languages || []).length - 3} more
-                    </Badge>
+                <div className="flex flex-wrap gap-2 mt-4">
+                  <Button 
+                    variant="outline"
+                    onClick={() => setSelectedNanny(nanny)}
+                  >
+                    View Profile
+                  </Button>
+                  {user && hasRole && (
+                    <>
+                      {!hasInterest ? (
+                        <Button 
+                          className="flex-1"
+                          onClick={() => setSelectedNanny(nanny)}
+                        >
+                          Express Interest
+                        </Button>
+                      ) : isPaid ? (
+                        <div className="flex-1 flex items-center justify-center p-2 bg-green-100 text-green-800 rounded-md">
+                          <CheckCircle className="h-4 w-4 mr-2" />
+                          Contact Unlocked
+                        </div>
+                      ) : isApproved ? (
+                        <Button 
+                          className="flex-1"
+                          variant="default"
+                          onClick={() => interest?.id && handlePayment(nanny, interest.id)}
+                          disabled={processingPayment === nanny.id}
+                        >
+                          {processingPayment === nanny.id ? (
+                            'Processing...'
+                          ) : (
+                            <>
+                              <CreditCard className="mr-2 h-4 w-4" />
+                              Pay to Unlock Contact
+                            </>
+                          )}
+                        </Button>
+                      ) : (
+                        <Button 
+                          className="flex-1"
+                          variant="secondary"
+                          disabled
+                        >
+                          Awaiting Nanny Response
+                        </Button>
+                      )}
+                    </>
                   )}
                 </div>
-              </div>
-
-              <div className="flex flex-wrap gap-2 mt-4">
-                <Button 
-                  variant="outline"
-                  onClick={() => setSelectedNanny(nanny)}
-                >
-                  View Profile
-                </Button>
-                {user && hasRole && (
-                  <>
-                    <Button 
-                      className="flex-1"
-                      onClick={() => setSelectedNanny(nanny)}
-                      disabled={!canExpressInterest(nanny.id)}
-                    >
-                      {canExpressInterest(nanny.id) ? 'Express Interest' : 'Interest Pending'}
-                    </Button>
-                    {hasInterestForNanny(nanny.id) && getInterestStatusForNanny(nanny.id) === 'approved' && (
-                      <Button 
-                        className="flex-1"
-                        variant="default"
-                      >
-                        Pay
-                      </Button>
-                    )}
-                  </>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
       {filteredNannies.length === 0 && (
@@ -864,12 +1133,11 @@ export default function FindNanny() {
                   />
                 )}
                 <div className="flex-1">
-                  <h3 className="text-2xl font-bold">{selectedNanny.profiles.first_name || ''} {selectedNanny.profiles.last_name || ''}</h3>
+                  <h3 className="text-2xl font-bold">{selectedNanny.profiles.first_name || ''}</h3>
                   <p className="text-muted-foreground">
                     {selectedNanny.profiles.city || ''}{selectedNanny.profiles.town ? `, ${selectedNanny.profiles.town}` : ''}{selectedNanny.profiles.suburb ? `, ${selectedNanny.profiles.suburb}` : ''}
                   </p>
                   <div className="flex gap-4 mt-1">
-                    <p className="text-xl font-semibold text-primary">R{selectedNanny.hourly_rate || 0}/hour</p>
                     {selectedNanny.date_of_birth && (
                       <p className="text-lg text-muted-foreground">
                         Age: {calculateAge(selectedNanny.date_of_birth)} years
@@ -973,24 +1241,68 @@ export default function FindNanny() {
                       onChange={(e) => setInterestMessage(e.target.value)}
                       placeholder="Tell the nanny about your family and what you're looking for..."
                     />
+                    
                     {!isProfileComplete(user.id) && (
                       <div className="text-sm text-red-600">
                         Please complete your profile (name, email, phone, and city are required) to send an interest.{' '}
                         <a href="/profile" className="underline">Complete Profile</a>
                       </div>
                     )}
-                    <Button 
-                      onClick={handleExpressInterest} 
-                      disabled={sendingInterest || !interestMessage.trim() || !canExpressInterest(selectedNanny.id) || !isProfileComplete(user.id)}
-                      className="w-full"
-                    >
-                      {sendingInterest ? 'Sending...' : canExpressInterest(selectedNanny.id) ? 'Express Interest' : 'Interest Pending'}
-                    </Button>
-                    {hasInterestForNanny(selectedNanny.id) && getInterestStatusForNanny(selectedNanny.id) === 'approved' && (
-                      <Button className="w-full mt-2" variant="default">
-                        Pay
-                      </Button>
-                    )}
+                    
+                    {(() => {
+                      const interest = getInterestStatusForNanny(selectedNanny.id);
+                      const hasInterest = !!interest;
+                      const isApproved = interest ? isInterestApprovedByNanny(interest) : false;
+                      const isPaid = interest?.payment_status === 'completed';
+                      
+                      if (!hasInterest) {
+                        return (
+                          <Button 
+                            onClick={handleExpressInterest} 
+                            disabled={sendingInterest || !interestMessage.trim() || !isProfileComplete(user.id)}
+                            className="w-full"
+                          >
+                            {sendingInterest ? 'Sending...' : 'Express Interest'}
+                          </Button>
+                        );
+                      } else if (isPaid) {
+                        return (
+                          <div className="p-3 bg-green-100 text-green-800 rounded-md text-center">
+                            <CheckCircle className="h-5 w-5 mx-auto mb-1" />
+                            <p className="font-semibold">Contact Details Unlocked</p>
+                            <p className="text-sm">Check your email for nanny contact information</p>
+                          </div>
+                        );
+                      } else if (isApproved) {
+                        return (
+                          <Button 
+                            className="w-full" 
+                            variant="default"
+                            onClick={() => interest?.id && handlePayment(selectedNanny, interest.id)}
+                            disabled={processingPayment === selectedNanny.id}
+                          >
+                            {processingPayment === selectedNanny.id ? (
+                              'Processing Payment...'
+                            ) : (
+                              <>
+                                <CreditCard className="mr-2 h-4 w-4" />
+                                Pay to Unlock Contact Details
+                              </>
+                            )}
+                          </Button>
+                        );
+                      } else {
+                        return (
+                          <Button 
+                            className="w-full"
+                            variant="secondary"
+                            disabled
+                          >
+                            Interest Pending - Awaiting Nanny Response
+                          </Button>
+                        );
+                      }
+                    })()}
                   </div>
                 </div>
               )}

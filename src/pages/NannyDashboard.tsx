@@ -523,37 +523,72 @@ export default function NannyDashboard() {
             </CardContent>
           </Card>
 
-          {/* Interest Requests */}
+          {/* CLIENT INTEREST REQUESTS — PRIVACY FIXED */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Heart className="h-5 w-5" />
                 Client Interest Requests
               </CardTitle>
+              <CardDescription>
+                Clients can only see your <strong>first name</strong> until they pay
+              </CardDescription>
             </CardHeader>
             <CardContent>
               {interests.length > 0 ? (
                 interests.map(interest => (
-                  <div key={interest.id} className="mb-4 p-4 border rounded-lg">
-                    <p><strong>Client:</strong> {interest.client_first_name} {interest.client_last_name}</p>
-                    <p><strong>Email:</strong> {interest.client_email}</p>
-                    <p><strong>Message:</strong> {interest.message}</p>
-                    <p><strong>Status:</strong> {getStatusBadge(interest.status || 'pending')}</p>
-                    {interest.nanny_response && <p><strong>Response:</strong> {interest.nanny_response}</p>}
+                  <div key={interest.id} className="mb-6 p-5 border rounded-xl bg-gray-50">
+                    <div className="space-y-3">
+                      <p className="font-semibold text-lg">
+                        {interest.client_first_name} {interest.client_last_name}
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        <strong>Email:</strong> {interest.client_email}
+                      </p>
+                      {interest.message && (
+                        <p className="text-sm text-gray-700 italic">
+                          "{interest.message}"
+                        </p>
+                      )}
+                      <p className="text-xs text-gray-500">
+                        Sent on {new Date(interest.created_at).toLocaleDateString()}
+                      </p>
+
+                    
+
+                      {interest.nanny_response && (
+                        <p className="text-sm mt-2 text-gray-700">
+                          <strong>Your Response:</strong> {interest.nanny_response}
+                        </p>
+                      )}
+                    </div>
+
                     {interest.status === 'pending' && (
-                      <div className="mt-2 space-x-2">
-                        <Button onClick={() => handleInterestResponse(interest.id, 'approved')} variant="default">
-                          Approve
+                      <div className="mt-5 flex gap-3">
+                        <Button 
+                          onClick={() => handleInterestResponse(interest.id, 'approved')}
+                          className="bg-green-600 hover:bg-green-700"
+                        >
+                          Approve Request
                         </Button>
-                        <Button onClick={() => handleInterestResponse(interest.id, 'declined')} variant="destructive">
+                        <Button 
+                          onClick={() => handleInterestResponse(interest.id, 'declined')}
+                          variant="destructive"
+                        >
                           Decline
                         </Button>
                       </div>
                     )}
+
+                
                   </div>
                 ))
               ) : (
-                <p className="text-muted-foreground">No interest requests yet.</p>
+                <div className="text-center py-8 text-gray-500">
+                  <Heart className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                  <p>No client interest requests yet.</p>
+                  <p className="text-sm mt-2">Complete your profile to start receiving requests!</p>
+                </div>
               )}
             </CardContent>
           </Card>

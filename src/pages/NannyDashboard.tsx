@@ -38,11 +38,15 @@ interface NannyProfile {
   training_child_development: boolean | null;
   criminal_check_status: 'pending' | 'approved' | 'rejected' | null;
   credit_check_status: 'pending' | 'approved' | 'rejected' | null;
+  proof_of_residence_status: 'pending' | 'approved' | 'rejected' | null;
   academy_completed: boolean | null;
   profile_approved: boolean | null;
   criminal_check_url: string | null;
   credit_check_url: string | null;
   interview_video_url: string | null;
+  date_of_birth: string | null;
+  accommodation_preference: string | null;
+  proof_of_residence_url: string | null;
 }
 
 interface UserProfile {
@@ -128,6 +132,9 @@ export default function NannyDashboard() {
         ...nannyData,
         experience_type: nannyData.experience_type as 'nanny' | 'cleaning' | 'both' || 'nanny',
         education_level: nannyData.education_level as 'high school no matric' | 'matric' | 'certificate' | 'diploma' | 'degree' || 'matric',
+        criminal_check_status: nannyData.criminal_check_status as 'pending' | 'approved' | 'rejected' || 'pending',
+        credit_check_status: nannyData.credit_check_status as 'pending' | 'approved' | 'rejected' || 'pending',
+        proof_of_residence_status: ('proof_of_residence_status' in nannyData ? (nannyData as any).proof_of_residence_status as 'pending' | 'approved' | 'rejected' : 'pending'),
       };
       setNannyProfile(safeNannyData);
 
@@ -204,7 +211,7 @@ export default function NannyDashboard() {
     }
   };
 
-  const handleFileUpload = async (file: File, type: 'criminal_check' | 'credit_check' | 'interview_video' | 'profile_picture' | 'intro_video') => {
+  const handleFileUpload = async (file: File, type: 'criminal_check' | 'credit_check' | 'interview_video' | 'profile_picture' | 'intro_video' | 'proof_of_residence') => {
     try {
       const fileExt = file.name.split('.').pop();
       const fileName = `${user?.id}/${type}-${Date.now()}.${fileExt}`;
@@ -215,6 +222,8 @@ export default function NannyDashboard() {
         ? 'credit-checks'
         : type === 'profile_picture'
         ? 'profile-pictures'
+        : type === 'proof_of_residence'
+        ? 'proof-of-residence'
         : 'interview-videos';
 
       const { error: uploadError } = await supabase.storage.from(bucketName).upload(fileName, file);
@@ -245,6 +254,9 @@ export default function NannyDashboard() {
           updateData.credit_check_status = 'pending';
         } else if (type === 'interview_video' || type === 'intro_video') {
           updateData.interview_video_url = fileUrl;
+        } else if (type === 'proof_of_residence') {
+          updateData.proof_of_residence_url = fileUrl;
+          updateData.proof_of_residence_status = 'pending';
         }
 
         const { error: updateError } = await supabase
@@ -374,10 +386,35 @@ export default function NannyDashboard() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <div className="flex items-center justify-between"><span>Criminal Check</span>{getStatusBadge(nannyProfile?.criminal_check_status || 'pending')}</div>
-                <div className="flex items-center justify-between"><span>Credit Check</span>{getStatusBadge(nannyProfile?.credit_check_status || 'pending')}</div>
-                <div className="flex items-center justify-between"><span>Academy Training</span>{getStatusBadge('', nannyProfile?.academy_completed || false)}</div>
-                <div className="flex items-center justify-between"><span>Profile Approval</span>{getStatusBadge('', nannyProfile?.profile_approved || false)}</div>
+                <div className="flex items-center justify-between">
+                  <span>Criminal Check</span>
+                  {nannyProfile?.criminal_check_url ? 
+                    getStatusBadge(nannyProfile?.criminal_check_status || 'pending') : 
+                    <Badge variant="outline">Not Uploaded</Badge>
+                  }
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Credit Check</span>
+                  {nannyProfile?.credit_check_url ? 
+                    getStatusBadge(nannyProfile?.credit_check_status || 'pending') : 
+                    <Badge variant="outline">Not Uploaded</Badge>
+                  }
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Proof of Residence</span>
+                  {nannyProfile?.proof_of_residence_url ? 
+                    getStatusBadge(nannyProfile?.proof_of_residence_status || 'pending') : 
+                    <Badge variant="outline">Not Uploaded</Badge>
+                  }
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Academy Training</span>
+                  {getStatusBadge('', nannyProfile?.academy_completed || false)}
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Profile Approval</span>
+                  {getStatusBadge('', nannyProfile?.profile_approved || false)}
+                </div>
               </div>
               {!nannyProfile?.profile_approved && (
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
@@ -411,10 +448,37 @@ export default function NannyDashboard() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div><label className="text-sm font-medium text-muted-foreground">Location</label><p className="flex items-center gap-1"><MapPin className="h-4 w-4" />{userProfile?.suburb}, {userProfile?.city}</p></div>
-                <div><label className="text-sm font-medium text-muted-foreground">Languages</label><p className="flex items-center gap-1"><Languages className="h-4 w-4" />{nannyProfile?.languages?.join(', ') || 'Not specified'}</p></div>
-                <div><label className="text-sm font-medium text-muted-foreground">Experience</label><p className="flex items-center gap-1"><Award className="h-4 w-4" />{getExperienceLabel(nannyProfile?.experience_duration)} - {nannyProfile?.experience_type}</p></div>
-                <div><label className="text-sm font-medium text-muted-foreground">Education</label><p className="flex items-center gap-1"><GraduationCap className="h-4 w-4" />{nannyProfile?.education_level || 'Not specified'}</p></div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Location</label>
+                  <p className="flex items-center gap-1"><MapPin className="h-4 w-4" />{userProfile?.suburb}, {userProfile?.city}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Date of Birth</label>
+                  <p>
+                    {nannyProfile?.date_of_birth ? 
+                      new Date(nannyProfile.date_of_birth).toLocaleDateString() : 
+                      'Not specified'
+                    }
+                  </p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Languages</label>
+                  <p className="flex items-center gap-1"><Languages className="h-4 w-4" />{nannyProfile?.languages?.join(', ') || 'Not specified'}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Accommodation</label>
+                  <p className="capitalize">
+                    {nannyProfile?.accommodation_preference?.replace('_', ' ') || 'Not specified'}
+                  </p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Experience</label>
+                  <p className="flex items-center gap-1"><Award className="h-4 w-4" />{getExperienceLabel(nannyProfile?.experience_duration)} - {nannyProfile?.experience_type}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Education</label>
+                  <p className="flex items-center gap-1"><GraduationCap className="h-4 w-4" />{nannyProfile?.education_level || 'Not specified'}</p>
+                </div>
               </div>
               <div><label className="text-sm font-medium text-muted-foreground">Bio</label><p className="text-sm mt-1">{nannyProfile?.bio || 'No bio provided'}</p></div>
               <Link to="/profile"><Button variant="outline" className="w-full">Edit Profile</Button></Link>
@@ -462,6 +526,7 @@ export default function NannyDashboard() {
                 </div>
               )}
 
+              {/* CRIMINAL CHECK UPLOAD */}
               {!nannyProfile?.criminal_check_url && (
                 <div>
                   <input type="file" id="criminal-check-upload" accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0], 'criminal_check')} />
@@ -471,11 +536,36 @@ export default function NannyDashboard() {
                 </div>
               )}
 
+              {/* CREDIT CHECK UPLOAD */}
               {!nannyProfile?.credit_check_url && (
                 <div>
                   <input type="file" id="credit-check-upload" accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0], 'credit_check')} />
                   <Button variant="outline" className="w-full justify-start" onClick={() => document.getElementById('credit-check-upload')?.click()}>
                     <Upload className="h-4 w-4 mr-2" />Upload Credit Check
+                  </Button>
+                </div>
+              )}
+
+              {/* PROOF OF RESIDENCE UPLOAD */}
+              {!nannyProfile?.proof_of_residence_url && (
+                <div>
+                  <input
+                    type="file"
+                    id="proof-of-residence-upload"
+                    accept=".pdf,.jpg,.jpeg,.png"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleFileUpload(file, 'proof_of_residence');
+                    }}
+                  />
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start"
+                    onClick={() => document.getElementById('proof-of-residence-upload')?.click()}
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    Upload Proof of Residence
                   </Button>
                 </div>
               )}
@@ -554,8 +644,6 @@ export default function NannyDashboard() {
                         Sent on {new Date(interest.created_at).toLocaleDateString()}
                       </p>
 
-                    
-
                       {interest.nanny_response && (
                         <p className="text-sm mt-2 text-gray-700">
                           <strong>Your Response:</strong> {interest.nanny_response}
@@ -579,8 +667,6 @@ export default function NannyDashboard() {
                         </Button>
                       </div>
                     )}
-
-                
                   </div>
                 ))
               ) : (

@@ -211,7 +211,7 @@ export default function TermsOfService() {
                 If you have any questions about these Terms of Service, please contact us:
               </p>
               <div className="space-y-2 text-muted-foreground">
-                <p><strong>Email:</strong> admin@nannyplacementssa.co.za</p>
+                <p><strong>Email:</strong> admin@nannyplacementssouthafrica.co.za</p>
                 <p><strong>Phone:</strong> +27 (0) 11 123 4567</p>
                 <p><strong>Address:</strong> Johannesburg, South Africa</p>
               </div>

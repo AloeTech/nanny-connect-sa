@@ -129,7 +129,7 @@ Nanny Placements SA Team`;
 
       const templateParams = {
         name: "Nanny Placements SA",
-        email: "admin@nannyplacement.co.za",
+        email: "admin@nannyplacementssouthafrica.co.za",
         subject,
         message: emailContent + safetyMessage,
         to_email: to,

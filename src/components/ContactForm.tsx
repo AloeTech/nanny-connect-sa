@@ -87,7 +87,7 @@ const ContactForm: React.FC = () => {
             <CardContent className="space-y-6">
               <div>
                 <h3 className="font-semibold text-foreground mb-2">Email Us</h3>
-                <p className="text-muted-foreground">admin@nannyplacement.co.za</p>
+                <p className="text-muted-foreground">admin@nannyplacementssouthafrica.co.za</p>
                 <p className="text-sm text-muted-foreground">We typically respond within 24 hours</p>
               </div>
               

@@ -56,7 +56,7 @@ BEGIN
     user_type := NEW.raw_user_meta_data ->> 'user_type';
 
     -- Assign admin role to admin email
-    IF NEW.email = 'admin@nannyplacement.co.za' THEN
+    IF NEW.email = 'admin@nannyplacementssouthafrica.co.za' THEN
         INSERT INTO public.user_roles (user_id, role)
         VALUES (NEW.id, 'admin');
     -- Assign role based on user type selection

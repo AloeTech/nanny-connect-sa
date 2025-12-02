@@ -352,7 +352,7 @@ CREATE TRIGGER update_academy_videos_updated_at
     EXECUTE FUNCTION public.update_updated_at_column();
 
 -- Insert admin user role (this will need to be done after the admin user signs up)
--- The admin email is admin@nannyplacement.co.za
+-- The admin email is admin@nannyplacementssouthafrica.co.za
 
 -- Create function to handle new user registration
 CREATE OR REPLACE FUNCTION public.handle_new_user()
@@ -368,7 +368,7 @@ BEGIN
     );
 
     -- Assign admin role to admin email
-    IF NEW.email = 'admin@nannyplacement.co.za' THEN
+    IF NEW.email = 'admin@nannyplacementssouthafrica.co.za' THEN
         INSERT INTO public.user_roles (user_id, role)
         VALUES (NEW.id, 'admin');
     END IF;

@@ -1,7 +1,7 @@
+// components/ContactForm.tsx
 import React, { useState } from 'react';
 import { Mail, Send } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
-import emailjs from '@emailjs/browser';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,23 +22,18 @@ const ContactForm: React.FC = () => {
     setSubmitting(true);
 
     try {
-      const serviceID = "service_syqn4ol";
-      const templateID = "template_exkrbne";
-      const publicKey = "rK97vwvxnXTTY8PjW";
+      const response = await fetch('/send-contact-email.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: formData.name,
+          email: formData.email,
+          subject: formData.subject || 'General Inquiry',
+          message: formData.message,
+        }),
+      });
 
-      const templateParams = {
-        name: formData.name,
-        email: formData.email,
-        subject: formData.subject || 'General Inquiry',
-        message: formData.message,
-        to_email: 'aloetecha@gmail.com',
-      };
-
-      const response = await emailjs.send(serviceID, templateID, templateParams, publicKey);
-
-      if (response.status !== 200) {
-        throw new Error('Failed to send email');
-      }
+      if (!response.ok) throw new Error('Failed to send');
 
       toast({
         title: "Message sent successfully!",
@@ -46,11 +41,11 @@ const ContactForm: React.FC = () => {
       });
 
       setFormData({ name: '', email: '', subject: '', message: '' });
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to send email:', error);
       toast({
         title: "Error",
-        description: "Failed to send message. Please try again.",
+        description: "Failed to send message. Please try again or email us directly at admin@nannyplacementssouthafrica.co.za",
         variant: "destructive",
       });
     } finally {
@@ -58,7 +53,7 @@ const ContactForm: React.FC = () => {
     }
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData(prev => ({
       ...prev,
       [e.target.name]: e.target.value,

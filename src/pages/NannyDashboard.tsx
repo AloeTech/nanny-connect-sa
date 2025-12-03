@@ -11,7 +11,6 @@ import {
   GraduationCap, Award, Heart 
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import emailjs from '@emailjs/browser';
 import {
   Dialog,
   DialogContent,
@@ -20,9 +19,6 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
-
-// Initialize EmailJS
-emailjs.init('rK97vwvxnXTTY8PjW');
 
 interface NannyProfile {
   id: string;
@@ -96,6 +92,28 @@ const getExperienceLabel = (duration: number | null): string => {
   if (duration === null) return 'Not specified';
   const option = experienceDurationOptions.find(opt => opt.value >= duration) || experienceDurationOptions[experienceDurationOptions.length - 1];
   return option.label;
+};
+
+// New function to send email via Afrihost PHP
+const sendEmail = async (to: string, subject: string, message: string) => {
+  try {
+    const response = await fetch('https://nannyplacementssouthafrica.co.za/send-contact-email.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        to, 
+        subject, 
+        message 
+        // Remove 'type' parameter since PHP no longer uses it
+      })
+    });
+    
+    if (!response.ok) throw new Error('Email failed');
+    return await response.json();
+  } catch (error) {
+    console.error('Email error:', error);
+    return { success: false };
+  }
 };
 
 export default function NannyDashboard() {
@@ -288,44 +306,51 @@ export default function NannyDashboard() {
     const interest = interests.find(i => i.id === interestId);
     if (!interest || !userProfile) return;
 
-    const { data, error: updateError } = await supabase
-      .from('interests')
-      .update({
-        status: response === 'approved' ? 'approved' : 'declined',
-        nanny_response: `${userProfile.first_name} has ${response} your request on ${new Date().toLocaleDateString()}.`,
-      })
-      .eq('id', interestId)
-      .select();
+    try {
+      const { data, error: updateError } = await supabase
+        .from('interests')
+        .update({
+          status: response === 'approved' ? 'approved' : 'declined',
+          nanny_response: `${userProfile.first_name} has ${response} your request on ${new Date().toLocaleDateString()}.`,
+        })
+        .eq('id', interestId)
+        .select();
 
-    if (updateError || !data || data.length === 0) {
+      if (updateError || !data || data.length === 0) {
+        toast({
+          title: 'Error',
+          description: 'Failed to update interest response',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      setInterests(interests.map(i => i.id === interestId ? data[0] as Interest : i));
+
+      // Send email to client using Afrihost PHP
+      const clientEmailSent = await sendEmail(
+        interest.client_email || '',
+        `Interest Request ${response === 'approved' ? 'Approved' : 'Declined'} - Nanny Placements SA`,
+        `Hi ${interest.client_first_name},
+
+Your interest request for ${interest.nanny_first_name} ${interest.nanny_last_name || ''} has been ${response} by ${userProfile.first_name}.
+
+${userProfile.first_name}'s response: "${userProfile.first_name} has ${response} your request on ${new Date().toLocaleDateString()}."
+
+Best regards,
+Nanny Placements SA Team`
+      );
+
+      toast({
+        title: 'Success',
+        description: `Request ${response}d${clientEmailSent ? ' and email sent to client' : ''}`,
+      });
+    } catch (error: any) {
       toast({
         title: 'Error',
-        description: 'Failed to update interest response',
+        description: error.message,
         variant: 'destructive',
       });
-      return;
-    }
-
-    setInterests(interests.map(i => i.id === interestId ? data[0] as Interest : i));
-
-    const emailParams = {
-      serviceID: 'service_syqn4ol',
-      templateID: 'template_exkrbne',
-      publicKey: 'rK97vwvxnXTTY8PjW',
-      templateParams: {
-        name: `${interest.client_first_name} ${interest.client_last_name || ''}`,
-        email: interest.client_email || '',
-        subject: `Interest Response - Nanny Placements SA`,
-        message: `Your interest request for ${interest.nanny_first_name} ${interest.nanny_last_name || ''} has been ${response}.\n\n${userProfile.first_name}'s response: "${userProfile.first_name} has ${response} your request on ${new Date().toLocaleDateString()}."\n\nBest regards,\nNanny Placements SA Team`,
-        to_email: interest.client_email || '',
-      },
-    };
-
-    try {
-      await emailjs.send(emailParams.serviceID, emailParams.templateID, emailParams.templateParams, emailParams.publicKey);
-      toast({ title: 'Success', description: `Email sent to client` });
-    } catch (error) {
-      toast({ title: 'Error', description: 'Failed to send email', variant: 'destructive' });
     }
   };
 

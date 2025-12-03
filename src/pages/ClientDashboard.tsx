@@ -6,16 +6,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { Heart, CreditCard, Calendar, User, MapPin, Clock, DollarSign, Eye, Edit, ShoppingCart, Trash2 } from 'lucide-react';
+import { Heart, CreditCard, Calendar, User, MapPin, Clock, DollarSign, Eye, Edit } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import emailjs from '@emailjs/browser';
-import.meta.env.VITE_FLUTTERWAVE_PUBLIC_KEY;
-
-// Initialize EmailJS
-emailjs.init('rK97vwvxnXTTY8PjW');
 
 interface ClientProfile {
   id: string;
@@ -73,11 +68,27 @@ interface Payment {
   transaction_id: string | null;
 }
 
-interface CartItem {
-  nannyId: string;
-  firstName: string;
-  interestId?: string;
-}
+// New function to send email via Afrihost PHP
+const sendEmail = async (to: string, subject: string, message: string) => {
+  try {
+    const response = await fetch('https://nannyplacementssouthafrica.co.za/send-contact-email.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        to, 
+        subject, 
+        message 
+        // Remove 'type' parameter since PHP no longer uses it
+      })
+    });
+    
+    if (!response.ok) throw new Error('Email failed');
+    return await response.json();
+  } catch (error) {
+    console.error('Email error:', error);
+    return { success: false };
+  }
+};
 
 export default function ClientDashboard() {
   const { user, userRole } = useAuth();
@@ -90,19 +101,6 @@ export default function ClientDashboard() {
   const [isEditing, setIsEditing] = useState(false);
   const [editedUserProfile, setEditedUserProfile] = useState<UserProfile | null>(null);
   const [editedClientProfile, setEditedClientProfile] = useState<ClientProfile | null>(null);
-  const [cart, setCart] = useState<CartItem[]>([]);
-
-  // CART: Load & Save
-  useEffect(() => {
-    const saved = localStorage.getItem('nannyCart');
-    if (saved) {
-      try { setCart(JSON.parse(saved)); } catch { localStorage.removeItem('nannyCart'); }
-    }
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem('nannyCart', JSON.stringify(cart));
-  }, [cart]);
 
   useEffect(() => {
     if (user && userRole === 'client') {
@@ -191,6 +189,15 @@ export default function ClientDashboard() {
   };
 
   const handleFlutterwavePayment = async (interest: Interest) => {
+    // Prevent multiple payments for the same interest
+    if (interest.payment_status === 'completed') {
+      toast({ 
+        title: "Already Paid", 
+        description: "You have already paid for this nanny's contact details." 
+      });
+      return;
+    }
+
     if (!userProfile || !clientProfile) {
       toast({ title: "Error", description: "Profile not loaded", variant: "destructive" });
       return;
@@ -200,6 +207,9 @@ export default function ClientDashboard() {
     const nannyFullName = `${interest.nannies.profiles.first_name} ${interest.nannies.profiles.last_name}`;
     const nannyEmail = interest.nannies.profiles.email;
     const nannyPhone = interest.nannies.profiles.phone || 'Not provided';
+    const clientName = `${userProfile.first_name} ${userProfile.last_name}`;
+    const clientEmail = userProfile.email;
+    const clientPhone = userProfile.phone || 'Not provided';
 
     const FlutterwaveCheckout = (window as any).FlutterwaveCheckout;
 
@@ -208,25 +218,40 @@ export default function ClientDashboard() {
       return;
     }
 
-    
-const flutterwavePublicKey = import.meta.env.VITE_FLUTTERWAVE_PUBLIC_KEY;
+    const flutterwavePublicKey = import.meta.env.VITE_FLUTTERWAVE_PUBLIC_KEY;
 
-// Use it in FlutterwaveCheckout
-FlutterwaveCheckout({
-  public_key: flutterwavePublicKey,
-  tx_ref: `nanny-int-${interest.id}-${Date.now()}`,
-  amount: 200,
-  currency: "ZAR",
-  payment_options: "card,mobilemoney,ussd",
-  customer: {
-    email: userProfile.email,
-    phone_number: userProfile.phone || "",
-    name: `${userProfile.first_name} ${userProfile.last_name}`,
-  },
+    // Use it in FlutterwaveCheckout
+    FlutterwaveCheckout({
+      public_key: flutterwavePublicKey,
+      tx_ref: `nanny-int-${interest.id}-${Date.now()}`,
+      amount: 200,
+      currency: "ZAR",
+      payment_options: "card,mobilemoney,ussd",
+      customer: {
+        email: userProfile.email,
+        phone_number: userProfile.phone || "",
+        name: clientName,
+      },
 
       callback: async (response: any) => {
         if (response.status === "successful") {
           try {
+            // Check again to prevent race conditions
+            const { data: currentInterest } = await supabase
+              .from('interests')
+              .select('payment_status')
+              .eq('id', interest.id)
+              .single();
+
+            if (currentInterest?.payment_status === 'completed') {
+              toast({ 
+                title: "Already Paid", 
+                description: "This interest has already been paid for." 
+              });
+              return;
+            }
+
+            // Create payment record
             const { error: payError } = await supabase
               .from('payments')
               .insert({
@@ -241,37 +266,45 @@ FlutterwaveCheckout({
 
             if (payError) throw payError;
 
-            await supabase
+            // Update interest payment status
+            const { error: updateError } = await supabase
               .from('interests')
               .update({ payment_status: 'completed' })
               .eq('id', interest.id);
 
-            await emailjs.send(
-              'service_syqn4ol',
-              'template_exkrbne',
-              {
-                to_email: userProfile.email,
-                client_name: `${userProfile.first_name} ${userProfile.last_name}`,
-                nanny_name: nannyFullName,
-                nanny_email: nannyEmail,
-                nanny_phone: nannyPhone,
-                subject: "Interview Ready - Nanny Contact Details",
-                message: `Congratulations! Your payment was successful.\n\nHere are ${nannyFirstName}'s full contact details:\n\n• Name: ${nannyFullName}\n• Email: ${nannyEmail}\n• Phone: ${nannyPhone}\n\nYou can now contact ${nannyFirstName} directly to arrange your interview.\n\nBest regards,\nNanny Placements SA Team`,
-              },
-              'rK97vwvxnXTTY8PjW'
+            if (updateError) throw updateError;
+
+            // Update local state immediately
+            setInterests(prev => prev.map(i => 
+              i.id === interest.id ? { ...i, payment_status: 'completed' } : i
+            ));
+
+            // Send email to CLIENT with nanny contact details
+            const clientEmailSent = await sendEmail(
+              clientEmail,
+              `Interview Ready - Nanny Contact Details`,
+              `Congratulations ${userProfile.first_name}!\n\nYour payment was successful.\n\nHere are ${nannyFirstName}'s full contact details:\n\n• Full Name: ${nannyFullName}\n• Email: ${nannyEmail}\n• Phone: ${nannyPhone}\n\nYou can now contact ${nannyFirstName} directly to arrange your interview.\n\nBest regards,\nNanny Placements SA Team`
+            );
+
+            // Send email to NANNY to notify them
+            const nannyEmailSent = await sendEmail(
+              
+            nannyEmail,
+            `A Client Has Access To Your Contact Details - Nanny Placements SA`,
+            `Hi ${nannyFirstName},\n\nA Client now has your full contact information and may contact you directly to arrange an interview.\n\nPlease ensure you are ready and available to schedule and attend the interview promptly.\n\nBest regards,\nNanny Placements SA Team`
+
             );
 
             toast({
               title: "Payment Successful!",
-              description: `You've unlocked ${nannyFirstName}'s contact details. Check your email!`,
+              description: `You've unlocked ${nannyFirstName}'s contact details.${clientEmailSent ? ' Check your email!' : ' (Email sending failed, contact support for details)'}`,
             });
 
-            fetchData();
           } catch (err: any) {
             console.error("Payment processing failed:", err);
             toast({
-              title: "Payment Recorded But Email Failed",
-              description: "Contact support if you don't receive details.",
+              title: "Payment Failed",
+              description: "Please try again or contact support.",
               variant: "destructive"
             });
           }
@@ -283,7 +316,7 @@ FlutterwaveCheckout({
       customizations: {
         title: "Unlock Nanny Contact",
         description: `Pay to contact ${nannyFirstName}`,
-        logo: "https://nannyplacements.co.za/logo.png",
+        logo: "public\favicon.ico",
       },
     });
   };
@@ -346,45 +379,6 @@ FlutterwaveCheckout({
     }
   };
 
-  const payForCart = () => {
-    const total = cart.length * 200;
-    const FlutterwaveCheckout = (window as any).FlutterwaveCheckout;
-    const flutterwavePublicKey = import.meta.env.VITE_FLUTTERWAVE_PUBLIC_KEY;
-    FlutterwaveCheckout({
-      public_key: flutterwavePublicKey,
-      tx_ref: `cart-${Date.now()}`,
-      amount: total,
-      currency: "ZAR",
-      customer: { email: user?.email || "", name: user?.user_metadata?.full_name || "Client" },
-      callback: async (res: any) => {
-        if (res.status === "successful") {
-          const updates = cart
-            .filter(i => i.interestId)
-            .map(i => supabase.from('interests').update({ payment_status: 'completed' }).eq('id', i.interestId!));
-          await Promise.all(updates);
-          toast({ title: "Payment Successful!", description: `Unlocked ${cart.length} nannies! Check your email.` });
-          setCart([]);
-          fetchData();
-        }
-      },
-      customizations: { title: "Unlock Multiple Nannies", description: `R${total} for ${cart.length} nannies` }
-    });
-  };
-
-  const addToCart = (interest: Interest) => {
-    const nannyName = interest.nannies.profiles.first_name;
-    if (cart.some(i => i.nannyId === interest.nanny_id)) {
-      toast({ title: "Already in cart", description: `${nannyName} is already in your cart` });
-      return;
-    }
-    setCart(prev => [...prev, { nannyId: interest.nanny_id, firstName: nannyName, interestId: interest.id }]);
-    toast({ title: "Added!", description: `${nannyName} added to cart` });
-  };
-
-  const removeFromCart = (nannyId: string) => {
-    setCart(prev => prev.filter(i => i.nannyId !== nannyId));
-  };
-
   if (userRole !== 'client') {
     return (
       <div className="container mx-auto px-4 py-8 text-center">
@@ -408,36 +402,6 @@ FlutterwaveCheckout({
       <script src="https://checkout.flutterwave.com/v3.js" async></script>
 
       <div className="container mx-auto px-4 py-8">
-        {/* NEW: CART AT THE TOP */}
-        {cart.length > 0 && (
-          <Card className="mb-8 border-4 border-purple-600 bg-gradient-to-r from-purple-50 to-pink-50 shadow-2xl">
-            <CardHeader>
-              <CardTitle className="flex justify-between items-center text-3xl">
-                <div className="flex items-center gap-4">
-                  <ShoppingCart className="h-12 w-12 text-purple-700" />
-                  Your Cart ({cart.length})
-                </div>
-                <span className="text-5xl font-bold text-purple-800">R{cart.length * 200}</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4 mb-6">
-                {cart.map(item => (
-                  <div key={item.nannyId} className="flex justify-between items-center p-5 bg-white rounded-xl border-2 shadow">
-                    <span className="text-lg font-semibold">{item.firstName}</span>
-                    <Button variant="ghost" size="sm" onClick={() => removeFromCart(item.nannyId)}>
-                      <Trash2 className="h-6 w-6 text-red-600" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-              <Button onClick={payForCart} className="w-full bg-gradient-to-r from-purple-700 to-pink-700 hover:from-purple-800 hover:to-pink-800 text-white font-bold text-2xl py-8 rounded-2xl">
-                Pay R{cart.length * 200} - Unlock All Now
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-
         <div className="mb-8">
           <h1 className="text-3xl font-bold">Client Dashboard</h1>
           <p className="text-muted-foreground">Manage your nanny search and bookings</p>
@@ -517,16 +481,7 @@ FlutterwaveCheckout({
                                 size="lg"
                               >
                                 <CreditCard className="h-6 w-6 mr-3" />
-                                Pay Now
-                              </Button>
-                              <Button
-                                onClick={() => addToCart(interest)}
-                                variant="outline"
-                                className="flex-1 border-purple-600 text-purple-700 hover:bg-purple-50"
-                                size="lg"
-                              >
-                                <ShoppingCart className="h-6 w-6 mr-3" />
-                                Add to Cart
+                                Pay R200 to Unlock Contact Details
                               </Button>
                             </div>
                           )}
@@ -534,13 +489,13 @@ FlutterwaveCheckout({
                           {isPaid && (
                             <div className="bg-gradient-to-r from-emerald-50 to-green-50 border-2 border-emerald-400 rounded-xl p-6 text-center">
                               <p className="text-2xl font-bold text-emerald-800 mb-2">
-                                Payment Successful!
+                                ✓ Payment Successful!
                               </p>
                               <p className="text-emerald-700 font-medium">
                                 {nannyFirstName}'s full name, email, and phone number have been sent to your email.
                               </p>
                               <p className="text-sm text-emerald-600 mt-3">
-                                You can now arrange your interview directly
+                                You can now arrange your interview directly. The nanny has been notified.
                               </p>
                             </div>
                           )}
@@ -555,9 +510,11 @@ FlutterwaveCheckout({
                           )}
 
                           {interest.nanny_response === 'declined' && (
-                            <p className="text-center text-red-600 font-semibold">
-                              {nannyFirstName} has declined your request
-                            </p>
+                            <div className="text-center py-4">
+                              <p className="text-red-600 font-semibold">
+                                {nannyFirstName} has declined your request
+                              </p>
+                            </div>
                           )}
                         </div>
                       );
@@ -585,6 +542,9 @@ FlutterwaveCheckout({
                           <p className="font-medium">R{p.amount.toFixed(2)}</p>
                           <p className="text-sm text-muted-foreground">
                             {new Date(p.created_at).toLocaleDateString()}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Transaction: {p.transaction_id || 'N/A'}
                           </p>
                         </div>
                         {getPaymentStatusBadge(p.status)}

@@ -1,3 +1,4 @@
+// pages/AdminPanel.tsx
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
@@ -11,7 +12,6 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { Shield, Users, Video, FileCheck, CreditCard, CheckCircle, X, Upload, Edit, Heart, Eye, Trash2, Plus, FileText, Film } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import emailjs from '@emailjs/browser';
 
 interface NannyProfile {
   proof_of_residence_status: string;
@@ -98,123 +98,62 @@ export default function AdminPanel() {
   useEffect(() => {
     if (user && userRole === 'admin') {
       fetchData();
-      // Set up real-time subscription for interests
       const subscription = supabase
         .channel('interests_changes')
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'interests',
-          },
-          (payload) => {
-            console.log('Real-time interests update:', payload);
-            fetchData(); // Re-fetch data on any change
-          }
-        )
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'interests' }, () => {
+          fetchData();
+        })
         .subscribe();
 
-      return () => {
-        supabase.removeChannel(subscription);
-      };
+      return () => { supabase.removeChannel(subscription); };
     }
   }, [user, userRole]);
 
   const fetchData = async () => {
     try {
-      // Fetch nannies with profiles
       const { data: nanniesData } = await supabase
         .from('nannies')
-        .select(`
-          *,
-          profiles!inner(first_name, last_name, email, city, suburb)
-        `)
+        .select(`*, profiles!inner(first_name, last_name, email, city, suburb)`)
         .order('created_at', { ascending: false });
 
-      const normalizedNannies = (nanniesData || []).map(nanny => ({
-  ...nanny,
-  proof_of_residence_status: nanny.proof_of_residence_url || 'pending'
-}));
+      const normalizedNannies = (nanniesData || []).map((nanny: any) => ({
+        ...nanny,
+        proof_of_residence_status: nanny.proof_of_residence_status || (nanny.proof_of_residence_url ? 'pending' : 'none')
+      })) as NannyProfile[];
+      setNannies(normalizedNannies);
 
-setNannies(normalizedNannies);
-
-      // Fetch academy videos
-      const { data: videosData } = await supabase
-        .from('academy_videos')
-        .select('*')
-        .order('order_index');
-
+      const { data: videosData } = await supabase.from('academy_videos').select('*').order('order_index');
       setAcademyVideos(videosData || []);
 
-      // Fetch payments with client profiles
       const { data: paymentsData } = await supabase
         .from('payments')
-        .select(`
-          *,
-          clients!inner(
-            profiles!inner(first_name, last_name, email)
-          )
-        `)
+        .select(`*, clients!inner(profiles!inner(first_name, last_name, email))`)
         .order('created_at', { ascending: false });
 
-      // Transform data to match Payment interface
-      const transformedPayments = paymentsData?.map(payment => ({
-        id: payment.id,
-        amount: payment.amount,
-        status: payment.status,
-        created_at: payment.created_at,
-        profiles: payment.clients.profiles
+      const transformedPayments = paymentsData?.map(p => ({
+        id: p.id,
+        amount: p.amount,
+        status: p.status,
+        created_at: p.created_at,
+        profiles: p.clients.profiles
       })) || [];
-
       setPayments(transformedPayments);
 
-      // Fetch interests with explicit admin access (relies on RLS policy for user_roles)
-      const { data: interestsData, error: interestsError } = await supabase
+      const { data: interestsData } = await supabase
         .from('interests')
         .select(`
-          id,
-          client_id,
-          nanny_id,
-          message,
-          status,
-          created_at,
-          admin_approved,
-          nanny_response,
-          payment_status,
-          client_first_name,
-          client_last_name,
-          client_email,
-          nanny_first_name,
-          nanny_last_name,
-          nanny_email
+          id, client_id, nanny_id, message, status, created_at,
+          admin_approved, nanny_response, payment_status,
+          client_first_name, client_last_name, client_email,
+          nanny_first_name, nanny_last_name, nanny_email
         `)
         .order('created_at', { ascending: false });
 
-      if (interestsError) {
-        console.error('Interests fetch error:', {
-          message: interestsError.message,
-          details: interestsError.details,
-          hint: interestsError.hint,
-          code: interestsError.code
-        });
-        toast({
-          title: "Error",
-          description: `Failed to load interests: ${interestsError.message}. Check if admin role is correctly set in user_roles table.`,
-          variant: "destructive"
-        });
-      } else {
-        console.log('Fetched interests data:', interestsData);
-        setInterests(interestsData as Interest[] || []);
-      }
+      setInterests(interestsData as Interest[] || []);
 
     } catch (error) {
       console.error('Error fetching data:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load admin data. Please try again or check console for details.",
-        variant: "destructive"
-      });
+      toast({ title: "Error", description: "Failed to load admin data.", variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -222,320 +161,161 @@ setNannies(normalizedNannies);
 
   const updateDocumentStatus = async (nannyId: string, field: string, status: string) => {
     try {
-      const { error } = await supabase
-        .from('nannies')
-        .update({ [field]: status })
-        .eq('id', nannyId);
-
-      if (error) {
-        console.log('Document update error:', error);
-        throw error;
-      }
-
-      setNannies(nannies.map(nanny => 
-        nanny.id === nannyId ? { ...nanny, [field]: status } : nanny
-      ));
-
-      toast({
-        title: "Success",
-        description: `Document ${status} successfully`,
-      });
+      await supabase.from('nannies').update({ [field]: status }).eq('id', nannyId);
+      setNannies(nannies.map(n => n.id === nannyId ? { ...n, [field]: status } : n));
+      toast({ title: "Success", description: `Document ${status} successfully` });
     } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive"
-      });
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     }
   };
 
   const approveProfile = async (nannyId: string, approved: boolean) => {
     try {
-      const { error } = await supabase
-        .from('nannies')
-        .update({ profile_approved: approved })
-        .eq('id', nannyId);
-
-      if (error) {
-        console.log('Profile approval update error:', error);
-        throw error;
-      }
-
-      setNannies(nannies.map(nanny => 
-        nanny.id === nannyId ? { ...nanny, profile_approved: approved } : nanny
-      ));
-
-      toast({
-        title: "Success",
-        description: `Profile ${approved ? 'approved' : 'rejected'} successfully`,
-      });
+      await supabase.from('nannies').update({ profile_approved: approved }).eq('id', nannyId);
+      setNannies(nannies.map(n => n.id === nannyId ? { ...n, profile_approved: approved } : n));
+      toast({ title: "Success", description: `Profile ${approved ? 'approved' : 'rejected'}` });
     } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive"
-      });
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     }
   };
 
   const toggleTrainingBadge = async (nannyId: string, trainingType: string, currentValue: boolean) => {
     try {
-      const { error } = await supabase
-        .from('nannies')
-        .update({ [trainingType]: !currentValue })
-        .eq('id', nannyId);
-
-      if (error) {
-        console.log('Training badge update error:', error);
-        throw error;
-      }
-
-      setNannies(nannies.map(nanny => 
-        nanny.id === nannyId ? { ...nanny, [trainingType]: !currentValue } : nanny
-      ));
-
-      toast({
-        title: "Success",
-        description: `Badge ${!currentValue ? 'assigned' : 'revoked'} successfully`,
-      });
+      await supabase.from('nannies').update({ [trainingType]: !currentValue }).eq('id', nannyId);
+      setNannies(nannies.map(n => n.id === nannyId ? { ...n, [trainingType]: !currentValue } : n));
+      toast({ title: "Success", description: `Badge ${!currentValue ? 'assigned' : 'revoked'}` });
     } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive"
-      });
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     }
   };
 
   const createAcademyVideo = async () => {
     try {
-      const { error } = await supabase
-        .from('academy_videos')
-        .insert([newVideo]);
-
-      if (error) {
-        console.log('Academy video creation error:', error);
-        throw error;
-      }
-
-      setNewVideo({
-        title: '',
-        description: '',
-        video_url: '',
-        duration_minutes: 0,
-        order_index: 0
-      });
-
-      fetchData(); // Refresh data
-
-      toast({
-        title: "Success",
-        description: "Academy video created successfully",
-      });
+      await supabase.from('academy_videos').insert([newVideo]);
+      setNewVideo({ title: '', description: '', video_url: '', duration_minutes: 0, order_index: 0 });
+      fetchData();
+      toast({ title: "Success", description: "Video created" });
     } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive"
-      });
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     }
   };
 
   const deleteAcademyVideo = async (videoId: string) => {
     try {
-      const { error } = await supabase
-        .from('academy_videos')
-        .delete()
-        .eq('id', videoId);
-
-      if (error) {
-        console.log('Academy video deletion error:', error);
-        throw error;
-      }
-
-      setAcademyVideos(academyVideos.filter(video => video.id !== videoId));
-
-      toast({
-        title: "Success",
-        description: "Video deleted successfully",
-      });
+      await supabase.from('academy_videos').delete().eq('id', videoId);
+      setAcademyVideos(academyVideos.filter(v => v.id !== videoId));
+      toast({ title: "Success", description: "Video deleted" });
     } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive"
-      });
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     }
   };
 
   const toggleVideoActive = async (videoId: string, isActive: boolean) => {
     try {
-      const { error } = await supabase
-        .from('academy_videos')
-        .update({ is_active: !isActive })
-        .eq('id', videoId);
-
-      if (error) {
-        console.log('Academy video active toggle error:', error);
-        throw error;
-      }
-
-      setAcademyVideos(academyVideos.map(video => 
-        video.id === videoId ? { ...video, is_active: !isActive } : video
-      ));
-
-      toast({
-        title: "Success",
-        description: `Video ${!isActive ? 'activated' : 'deactivated'}`,
-      });
+      await supabase.from('academy_videos').update({ is_active: !isActive }).eq('id', videoId);
+      setAcademyVideos(academyVideos.map(v => v.id === videoId ? { ...v, is_active: !isActive } : v));
+      toast({ title: "Success", description: `Video ${!isActive ? 'activated' : 'deactivated'}` });
     } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive"
-      });
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     }
   };
+
+  const sendEmail = async (to: string, subject: string, message: string) => {
+  try {
+    const response = await fetch('https://nannyplacementssouthafrica.co.za/send-contact-email.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        to, 
+        subject, 
+        message 
+      })
+    });
+    
+    if (!response.ok) throw new Error('Email failed');
+    return await response.json();
+  } catch (error) {
+    console.error('Email error:', error);
+    return { success: false };
+  }
+};
 
   const handleInterestAction = async (interestId: string, action: 'approve' | 'decline') => {
     const interest = interests.find(i => i.id === interestId);
     if (!interest) return;
 
-    // Update interests table
-    console.log(`Attempting to update interest ${interestId} with status: ${action}`);
-    const responseText = `Admin has ${action === 'approve' ? 'approved' : 'declined'} your request on behalf of the nanny on ${new Date().toLocaleDateString()}.`;
-    const { data, error: updateError } = await supabase
-      .from('interests')
-      .update({
-        status: action === 'approve' ? 'approved' : 'declined',
-        admin_approved: action === 'approve',
-        nanny_response: responseText,
-      })
-      .eq('id', interestId)
-      .select();
-
-    if (updateError) {
-      console.error('Error updating interest:', {
-        message: updateError.message,
-        details: updateError.details,
-        hint: updateError.hint,
-        code: updateError.code
-      });
-      toast({
-        title: 'Error',
-        description: `Failed to update interest: ${updateError.message}. Check if admin has update permissions.`,
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    if (!data || data.length === 0) {
-      console.error('No data returned after update for interest:', interestId);
-      toast({
-        title: 'Error',
-        description: 'Failed to retrieve updated interest data.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    console.log('Updated interest data:', data[0]);
-    // Update local state with the returned data
-    setInterests(interests.map(i => i.id === interestId ? data[0] as Interest : i));
-
-    // Send email notification to client using EmailJS
-    const clientEmailParams = {
-      serviceID: 'service_syqn4ol',
-      templateID: 'template_exkrbne',
-      publicKey: 'rK97vwvxnXTTY8PjW',
-      templateParams: {
-        name: `${interest.client_first_name} ${interest.client_last_name || ''}`,
-        email: interest.client_email || '',
-        subject: `Interest Response - Nanny Placements SA`,
-        message: `Your interest request for ${interest.nanny_first_name} ${interest.nanny_last_name || ''} has been ${action === 'approve' ? 'approved' : 'declined'} by the admin on behalf of the nanny.
-
-Admin's response: "${responseText}"
-
-Best regards,
-Nanny Placements SA Team`,
-        to_email: interest.client_email || '',
-      },
-    };
+    const responseText = `Admin has ${action === 'approve' ? 'approved' : 'declined'} your request on ${new Date().toLocaleDateString()}.`;
 
     try {
-      await emailjs.send(clientEmailParams.serviceID, clientEmailParams.templateID, clientEmailParams.templateParams, clientEmailParams.publicKey);
-      toast({
-        title: 'Success',
-        description: `Email sent to client ${interest.client_email} regarding ${action} interest.`,
-      });
-    } catch (error: any) {
-      console.error('Email sending to client failed:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to send email notification to client',
-        variant: 'destructive',
-      });
-    }
+      const { data, error } = await supabase
+        .from('interests')
+        .update({
+          status: action === 'approve' ? 'approved' : 'declined',
+          admin_approved: action === 'approve',
+          nanny_response: responseText,
+        })
+        .eq('id', interestId)
+        .select();
 
-    // Send email notification to nanny using EmailJS
-    const nannyEmailParams = {
-      serviceID: 'service_syqn4ol',
-      templateID: 'template_exkrbne',
-      publicKey: 'rK97vwvxnXTTY8PjW',
-      templateParams: {
-        name: `${interest.nanny_first_name} ${interest.nanny_last_name || ''}`,
-        email: interest.nanny_email || '',
-        subject: `Interest Response - Nanny Placements SA`,
-        message: `The interest request from ${interest.client_first_name} ${interest.client_last_name || ''} has been ${action === 'approve' ? 'approved' : 'declined'} by the admin on your behalf.
+      if (error) throw error;
 
-Admin's response: "${responseText}"
+      setInterests(interests.map(i => i.id === interestId ? data[0] as Interest : i));
+
+      // Send emails without blocking the flow
+      const clientEmailSent = await sendEmail(
+        interest.client_email || '',
+        `Interest Request ${action === 'approve' ? 'Approved' : 'Declined'} - Nanny Placements SA`,
+        `Hi ${interest.client_first_name},
+
+Your interest request for ${interest.nanny_first_name} ${interest.nanny_last_name || ''} has been ${action === 'approve' ? 'APPROVED' : 'DECLINED'} by the admin.
+
+Admin's message: "${responseText}"
 
 Best regards,
-Nanny Placements SA Team`,
-        to_email: interest.nanny_email || '',
-      },
-    };
+Nanny Placements SA Team`
+      );
 
-    try {
-      await emailjs.send(nannyEmailParams.serviceID, nannyEmailParams.templateID, nannyEmailParams.templateParams, nannyEmailParams.publicKey);
-      toast({
-        title: 'Success',
-        description: `Email sent to nanny ${interest.nanny_email} regarding ${action} interest.`,
+      const nannyEmailSent = await sendEmail(
+        interest.nanny_email || '',
+        `Interest Update from Admin - Nanny Placements SA`,
+        `Hi ${interest.nanny_first_name},
+
+The interest request from ${interest.client_first_name} ${interest.client_last_name || ''} has been ${action === 'approve' ? 'APPROVED' : 'DECLINED'} by the admin on your behalf.
+
+Admin's message: "${responseText}"
+
+Best regards,
+Nanny Placements SA Team`
+      );
+
+      toast({ 
+        title: "Success", 
+        description: `Interest ${action}d${clientEmailSent || nannyEmailSent ? ' (emails sent)' : ' (email sending failed)'}` 
       });
     } catch (error: any) {
-      console.error('Email sending to nanny failed:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to send email notification to nanny',
-        variant: 'destructive',
-      });
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     }
   };
 
-  // Helper function to determine if file is PDF or image
   const isImageFile = (url: string) => {
-    const extension = url.split('.').pop()?.toLowerCase();
-    return ['jpg', 'jpeg', 'png'].includes(extension || '');
+    const ext = url.split('.').pop()?.toLowerCase();
+    return ['jpg', 'jpeg', 'png', 'webp'].includes(ext || '');
   };
 
   if (userRole !== 'admin') {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-destructive">Access Denied</h1>
-          <p className="text-muted-foreground mt-2">This page is only accessible to administrators.</p>
-        </div>
+      <div className="container mx-auto px-4 py-8 text-center">
+        <h1 className="text-2xl font-bold text-destructive">Access Denied</h1>
+        <p className="text-muted-foreground mt-2">This page is only accessible to administrators.</p>
       </div>
     );
   }
 
   if (loading) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-2 text-muted-foreground">Loading admin panel...</p>
-        </div>
+      <div className="container mx-auto px-4 py-8 text-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+        <p className="mt-2 text-muted-foreground">Loading admin panel...</p>
       </div>
     );
   }
@@ -581,9 +361,7 @@ Nanny Placements SA Team`,
                           <p className="text-sm">{nanny.profiles.suburb}, {nanny.profiles.city}</p>
                         </div>
 
-                        {/* Document Cards */}
                         <div className="space-y-4">
-                          {/* Criminal Check */}
                           <Card className="p-4">
                             <div className="flex items-center gap-2 mb-2">
                               <FileText className="h-5 w-5 text-muted-foreground" />
@@ -663,7 +441,6 @@ Nanny Placements SA Team`,
                             </div>
                           </Card>
 
-                          {/* Credit Check */}
                           <Card className="p-4">
                             <div className="flex items-center gap-2 mb-2">
                               <FileText className="h-5 w-5 text-muted-foreground" />
@@ -743,87 +520,85 @@ Nanny Placements SA Team`,
                             </div>
                           </Card>
 
-                          {/* Proof of Residence */}
                           <Card className="p-4">
-  <div className="flex items-center gap-2 mb-2">
-    <FileText className="h-5 w-5 text-muted-foreground" />
-    <span className="font-medium">Proof of Residence</span>
-  </div>
-  <div className="flex flex-col sm:flex-row gap-4 items-start">
-    <div className="w-full sm:w-48">
-      {nanny.proof_of_residence_url ? (
-        isImageFile(nanny.proof_of_residence_url) ? (
-          <img
-            src={nanny.proof_of_residence_url}
-            alt="Proof of Residence Preview"
-            className="w-full h-32 object-contain rounded border bg-gray-50"
-            onError={() => toast({
-              title: "Image preview failed",
-              description: "Unable to load proof of residence image. Try viewing externally.",
-              variant: "destructive"
-            })}
-          />
-        ) : (
-          <iframe
-            src={nanny.proof_of_residence_url}
-            title="Proof of Residence Preview"
-            className="w-full h-32 rounded border"
-            onError={() => toast({
-              title: "PDF preview failed",
-              description: "Unable to load proof of residence PDF. Try viewing externally.",
-              variant: "destructive"
-            })}
-          />
-        )
-      ) : (
-        <div className="w-full h-32 flex items-center justify-center bg-gray-100 rounded border">
-          <span className="text-sm text-muted-foreground">Not Uploaded</span>
-        </div>
-      )}
-    </div>
-    <div className="flex-1 space-y-2">
-      <Badge
-        variant={
-          nanny.proof_of_residence_status === 'approved'  // You'll need to add this field to your database
-            ? 'default'
-            : nanny.proof_of_residence_url
-            ? 'secondary'
-            : 'outline'
-        }
-        className={nanny.proof_of_residence_status === 'approved' ? 'bg-green-500' : ''}
-      >
-        {nanny.proof_of_residence_status === 'approved'
-          ? 'Approved'
-          : nanny.proof_of_residence_url
-          ? 'Pending'
-          : 'Not Uploaded'}
-      </Badge>
-      {nanny.proof_of_residence_url && (
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => window.open(nanny.proof_of_residence_url, '_blank')}
-        >
-          <Eye className="h-4 w-4 mr-2" />
-          View Externally
-        </Button>
-      )}
-      {nanny.proof_of_residence_url && nanny.proof_of_residence_status !== 'approved' && (
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => updateDocumentStatus(nanny.id, 'proof_of_residence_status', 'approved')}
-          disabled={nanny.proof_of_residence_status === 'approved'}
-        >
-          <CheckCircle className="h-4 w-4 mr-2" />
-          Approve
-        </Button>
-      )}
-    </div>
-  </div>
-</Card>
+                            <div className="flex items-center gap-2 mb-2">
+                              <FileText className="h-5 w-5 text-muted-foreground" />
+                              <span className="font-medium">Proof of Residence</span>
+                            </div>
+                            <div className="flex flex-col sm:flex-row gap-4 items-start">
+                              <div className="w-full sm:w-48">
+                                {nanny.proof_of_residence_url ? (
+                                  isImageFile(nanny.proof_of_residence_url) ? (
+                                    <img
+                                      src={nanny.proof_of_residence_url}
+                                      alt="Proof of Residence Preview"
+                                      className="w-full h-32 object-contain rounded border bg-gray-50"
+                                      onError={() => toast({
+                                        title: "Image preview failed",
+                                        description: "Unable to load proof of residence image. Try viewing externally.",
+                                        variant: "destructive"
+                                      })}
+                                    />
+                                  ) : (
+                                    <iframe
+                                      src={nanny.proof_of_residence_url}
+                                      title="Proof of Residence Preview"
+                                      className="w-full h-32 rounded border"
+                                      onError={() => toast({
+                                        title: "PDF preview failed",
+                                        description: "Unable to load proof of residence PDF. Try viewing externally.",
+                                        variant: "destructive"
+                                      })}
+                                    />
+                                  )
+                                ) : (
+                                  <div className="w-full h-32 flex items-center justify-center bg-gray-100 rounded border">
+                                    <span className="text-sm text-muted-foreground">Not Uploaded</span>
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex-1 space-y-2">
+                                <Badge
+                                  variant={
+                                    nanny.proof_of_residence_status === 'approved'
+                                      ? 'default'
+                                      : nanny.proof_of_residence_status === 'pending'
+                                      ? 'secondary'
+                                      : 'outline'
+                                  }
+                                  className={nanny.proof_of_residence_status === 'approved' ? 'bg-green-500' : ''}
+                                >
+                                  {nanny.proof_of_residence_status === 'approved'
+                                    ? 'Approved'
+                                    : nanny.proof_of_residence_status === 'pending'
+                                    ? 'Pending'
+                                    : 'Not Uploaded'}
+                                </Badge>
+                                {nanny.proof_of_residence_url && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => window.open(nanny.proof_of_residence_url, '_blank')}
+                                  >
+                                    <Eye className="h-4 w-4 mr-2" />
+                                    View Externally
+                                  </Button>
+                                )}
+                                {nanny.proof_of_residence_url && nanny.proof_of_residence_status !== 'approved' && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => updateDocumentStatus(nanny.id, 'proof_of_residence_status', 'approved')}
+                                    disabled={nanny.proof_of_residence_status === 'approved'}
+                                  >
+                                    <CheckCircle className="h-4 w-4 mr-2" />
+                                    Approve
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          </Card>
 
-                          {/* Interview Video */}
                           <Card className="p-4">
                             <div className="flex items-center gap-2 mb-2">
                               <Film className="h-5 w-5 text-muted-foreground" />
@@ -879,7 +654,6 @@ Nanny Placements SA Team`,
                             </div>
                           </Card>
 
-                          {/* Additional Statuses */}
                           <div className="flex flex-col sm:flex-row gap-4">
                             <div>
                               <span className="text-sm text-muted-foreground">Academy:</span>
@@ -902,7 +676,6 @@ Nanny Placements SA Team`,
                           </div>
                         </div>
 
-                        {/* Training Badges */}
                         <div>
                           <span className="text-sm font-medium text-muted-foreground">Training Badges:</span>
                           <div className="flex gap-2 mt-2 flex-wrap">
@@ -938,7 +711,6 @@ Nanny Placements SA Team`,
                         </div>
                       </div>
 
-                      {/* Action Buttons */}
                       <div className="flex flex-col gap-2">
                         <Button
                           size="sm"
@@ -973,8 +745,8 @@ Nanny Placements SA Team`,
                         <div className="space-y-2">
                           <p><strong>Client:</strong> {interest.client_first_name} {interest.client_last_name}</p>
                           <p><strong>Nanny:</strong> {interest.nanny_first_name} {interest.nanny_last_name}</p>
-                          <p><strong>Message:</strong> {interest.message}</p>
-                          <p><strong>Status:</strong> {interest.status}</p>
+                          <p><strong>Message:</strong> {interest.message || 'No message'}</p>
+                          <p><strong>Status:</strong> <Badge>{interest.status}</Badge></p>
                           <p><strong>Submitted:</strong> {new Date(interest.created_at).toLocaleString()}</p>
                           {interest.nanny_response && <p><strong>Response:</strong> {interest.nanny_response}</p>}
                         </div>
@@ -1010,7 +782,6 @@ Nanny Placements SA Team`,
               <CardDescription>Manage nanny training content</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Add New Video */}
               <Dialog>
                 <DialogTrigger asChild>
                   <Button>
@@ -1075,7 +846,6 @@ Nanny Placements SA Team`,
                 </DialogContent>
               </Dialog>
 
-              {/* Video List */}
               <div className="space-y-4">
                 {academyVideos.map((video) => (
                   <Card key={video.id}>

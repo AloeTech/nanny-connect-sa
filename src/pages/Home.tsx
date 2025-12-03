@@ -1,12 +1,61 @@
+// pages/Home.tsx
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle, Heart, Shield, Star, Users, Video } from "lucide-react";
+import { CheckCircle, Heart, Shield, Star, Users, Video, AlertCircle } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Home() {
   const { user, userRole } = useAuth();
+  const { toast } = useToast();
+  const [profileIncomplete, setProfileIncomplete] = useState(false);
+  const [loadingProfile, setLoadingProfile] = useState(true);
+
+  // Check if logged-in user has incomplete profile
+  useEffect(() => {
+    if (!user || !userRole || userRole === 'admin') {
+      setLoadingProfile(false);
+      return;
+    }
+
+    const checkProfile = async () => {
+      try {
+        let table = userRole === 'nanny' ? 'nannies' : 'clients';
+        let requiredFields = userRole === 'nanny'
+          ? ['criminal_check_url', 'credit_check_url', 'proof_of_residence_url', 'interview_video_url', 'bio', 'academy_completed']
+          : ['first_name', 'last_name', 'phone', 'city'];
+
+        const { data, error } = await supabase
+          .from(table)
+          .select(requiredFields.join(','))
+          .eq('user_id', user.id)
+          .single();
+
+        if (error || !data) {
+          setProfileIncomplete(true);
+          return;
+        }
+
+        const missing = requiredFields.some(field => {
+          const value = data[field];
+          return value === null || value === '' || value === false;
+        });
+
+        setProfileIncomplete(missing);
+      } catch (err) {
+        console.error("Profile check failed:", err);
+        setProfileIncomplete(true);
+      } finally {
+        setLoadingProfile(false);
+      }
+    };
+
+    checkProfile();
+  }, [user, userRole]);
 
   const features = [
     {
@@ -22,7 +71,7 @@ export default function Home() {
     {
       icon: Users,
       title: "More Control",
-      description: "You get to shortlist yuor own Nannies based on your prreferences. We make it easy fo you"
+      description: "You get to shortlist your own Nannies based on your preferences. We make it easy for you"
     },
     {
       icon: Star,
@@ -42,6 +91,25 @@ export default function Home() {
 
   return (
     <div className="min-h-screen">
+      {/* NEW: Scrolling Notification Bar for Incomplete Profiles */}
+      {user && userRole !== 'admin' && !loadingProfile && profileIncomplete && (
+        <div className="bg-gradient-to-r from-amber-500 to-orange-600 text-white py-4 px-6 shadow-lg animate-pulse">
+          <div className="container mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
+            <div className="flex items-center gap-3">
+              <AlertCircle className="h-6 w-6 animate-bounce" />
+              <p className="font-bold text-lg">
+                Action Required: Complete your profile to get full access to the platform!
+              </p>
+            </div>
+            <Link to={userRole === 'nanny' ? "/nanny-dashboard" : "/client-dashboard"}>
+              <Button size="lg" variant="secondary" className="bg-white text-orange-600 hover:bg-gray-100 font-bold shadow-md">
+                Complete Profile Now
+              </Button>
+            </Link>
+          </div>
+        </div>
+      )}
+
       {/* Hero Section */}
       <section className="hero-gradient text-primary-foreground py-20">
         <div className="container mx-auto px-4 text-center">
@@ -51,7 +119,7 @@ export default function Home() {
           <p className="text-xl md:text-2xl mb-8 max-w-3xl mx-auto opacity-90">
             Connect families with verified, trained, and background-checked nannies across South Africa
           </p>
-          
+         
           {!user ? (
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link to="/find-nanny">
@@ -104,7 +172,6 @@ export default function Home() {
               We ensure the highest standards of safety and quality in childcare placement
             </p>
           </div>
-
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
             {features.map((feature, index) => (
               <Card key={index} className="text-center card-hover">
@@ -134,7 +201,6 @@ export default function Home() {
               Every nanny goes through our comprehensive verification to ensure your family's safety
             </p>
           </div>
-
           <div className="grid md:grid-cols-3 gap-8 max-w-4xl mx-auto">
             <Card className="text-center">
               <CardHeader>
@@ -145,11 +211,10 @@ export default function Home() {
               </CardHeader>
               <CardContent>
                 <p className="text-muted-foreground">
-                  Criminal background verification, credit checks  and proof of residence for all nannies.
+                  Criminal background verification, credit checks and proof of residence for all nannies.
                 </p>
               </CardContent>
             </Card>
-
             <Card className="text-center">
               <CardHeader>
                 <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -163,7 +228,6 @@ export default function Home() {
                 </p>
               </CardContent>
             </Card>
-
             <Card className="text-center">
               <CardHeader>
                 <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -196,7 +260,6 @@ export default function Home() {
                 Your safety and the safety of your children is our top priority. Please follow these guidelines:
               </p>
             </div>
-
             <Card className="border-amber-200">
               <CardContent className="p-8">
                 <div className="grid md:grid-cols-2 gap-6">
@@ -209,10 +272,9 @@ export default function Home() {
                 </div>
               </CardContent>
             </Card>
-
             <div className="text-center mt-8">
               <Badge variant="outline" className="text-amber-800 border-amber-300 px-4 py-2">
-                Report concerns to: support@nannyplacement.co.za
+                Report concerns to: admin@nannyplacementssouthafrica.co.za
               </Badge>
             </div>
           </div>
@@ -229,7 +291,7 @@ export default function Home() {
           <p className="text-xl mb-8 opacity-90 max-w-2xl mx-auto">
             Join thousands of families who have found trusted childcare through our platform
           </p>
-          
+         
           {!user ? (
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link to="/auth">

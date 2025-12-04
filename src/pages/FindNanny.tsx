@@ -151,23 +151,29 @@ const getNannyProfileInfo = (nanny: Nanny) => {
 const extractInterestId = (txRef: string): string | null => {
   console.log('🔧 Extracting interest ID from txRef:', txRef);
   
-  if (!txRef) return null;
-  
-  // Remove the "nanny-" prefix if present
-  let cleanRef = txRef;
-  if (txRef.startsWith('nanny-')) {
-    cleanRef = txRef.substring(6); // Remove "nanny-"
+  if (!txRef) {
+    console.error('❌ txRef is null or undefined');
+    return null;
   }
   
+  // Check if it starts with nanny-
+  if (!txRef.startsWith('nanny-')) {
+    console.error('❌ txRef does not start with "nanny-":', txRef);
+    return null;
+  }
+  
+  // Remove the "nanny-" prefix
+  const cleanRef = txRef.substring(6);
   console.log('🔧 Clean ref after removing prefix:', cleanRef);
   
   // Split by dash
   const parts = cleanRef.split('-');
   console.log('🔧 Parts after split:', parts);
+  console.log('🔧 Number of parts:', parts.length);
   
   // We need at least 5 parts for a UUID
   if (parts.length < 5) {
-    console.error('❌ Not enough parts for UUID');
+    console.error('❌ Not enough parts for UUID. Need at least 5, got:', parts.length);
     return null;
   }
   
@@ -178,13 +184,15 @@ const extractInterestId = (txRef: string): string | null => {
   console.log('🔧 Extracted interest ID:', interestId);
   console.log('🔧 UUID length:', interestId.length, 'Expected: 36');
   
-  // Validate it looks like a UUID
+  // Validate it looks like a UUID (8-4-4-4-12 format)
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (!uuidRegex.test(interestId)) {
     console.error('❌ Invalid UUID format:', interestId);
+    console.error('❌ Expected pattern: 8-4-4-4-12 hex characters');
     return null;
   }
   
+  console.log('✅ Valid UUID extracted');
   return interestId;
 };
 
@@ -254,6 +262,8 @@ export default function FindNanny() {
 
   // Handle payment redirect after successful payment
   useEffect(() => {
+    let isMounted = true;
+    
     const handlePaymentRedirect = async () => {
       // Check if we're returning from a successful payment
       const urlParams = new URLSearchParams(window.location.search);
@@ -262,6 +272,11 @@ export default function FindNanny() {
       const transactionId = urlParams.get('transaction_id');
       
       console.log('🔍 Payment redirect check:', { status, txRef, transactionId });
+      
+      if (!isMounted) {
+        console.log('⏸️ Component unmounted, skipping...');
+        return;
+      }
       
       // Prevent multiple processing
       if (isProcessingRedirect.current) {
@@ -276,38 +291,48 @@ export default function FindNanny() {
         try {
           // Get client info
           if (!user) {
+            console.log('❌ User not found, showing toast...');
             toast({
               title: "User Not Found",
               description: "Please log in to complete payment processing.",
               variant: "destructive"
             });
+            isProcessingRedirect.current = false;
             return;
           }
 
           // Check if user has client role
           if (userRole !== 'client') {
+            console.log('❌ User is not a client, showing toast...');
             toast({
               title: "Access Denied",
               description: "Only clients can make payments for nanny contacts.",
               variant: "destructive"
             });
+            isProcessingRedirect.current = false;
             return;
           }
 
           // Extract interest ID
+          console.log('🔧 Extracting interest ID from txRef:', txRef);
           const interestId = extractInterestId(txRef);
+          console.log('🔧 Extracted interest ID:', interestId);
+          
           if (!interestId) {
+            console.log('❌ Failed to extract interest ID, showing toast...');
             toast({
               title: "Payment Error",
               description: "Could not extract payment information. Please contact support.",
               variant: "destructive"
             });
+            isProcessingRedirect.current = false;
             return;
           }
 
           console.log('🎯 Processing payment for interest:', interestId);
 
           // Get client record
+          console.log('👤 Getting client record for user:', user.id);
           const { data: clientData, error: clientError } = await supabase
             .from('clients')
             .select('id')
@@ -321,28 +346,48 @@ export default function FindNanny() {
               description: "Client information not found. Please complete your client profile.",
               variant: "destructive"
             });
+            isProcessingRedirect.current = false;
             return;
           }
 
-          console.log('👤 Client found:', clientData.id);
+          console.log('✅ Client found:', clientData.id);
 
           // Check if payment already exists
-          const { data: existingPayment } = await supabase
+          console.log('💳 Checking for existing payment with transaction_id:', transactionId);
+          const { data: existingPayment, error: paymentCheckError } = await supabase
             .from('payments')
             .select('*')
             .eq('transaction_id', transactionId)
             .single();
 
+          if (paymentCheckError && paymentCheckError.code !== 'PGRST116') {
+            console.error('❌ Error checking payment:', paymentCheckError);
+          }
+
           if (existingPayment) {
             console.log('✅ Payment already exists:', existingPayment);
             
             if (existingPayment.status === 'completed') {
+              console.log('📝 Payment already completed, showing toast...');
               toast({
                 title: "Payment Already Processed",
                 description: "This payment has already been recorded.",
               });
+              
+              // Still need to update URL and refresh
+              setTimeout(() => {
+                if (!isMounted) return;
+                window.history.replaceState({}, document.title, '/find-nanny');
+                setRefreshCount(prev => prev + 1);
+                fetchExistingInterests();
+                console.log('✅ Page refresh triggered');
+                isProcessingRedirect.current = false;
+              }, 2000);
+              
+              return;
             } else {
               // Update to completed
+              console.log('🔄 Updating existing payment to completed...');
               const { error: updateError } = await supabase
                 .from('payments')
                 .update({
@@ -362,6 +407,7 @@ export default function FindNanny() {
             console.log('🆕 Creating new payment record...');
             
             // First get interest to verify and get nanny_id
+            console.log('🔍 Querying interest with ID:', interestId);
             const { data: interestData, error: interestError } = await supabase
               .from('interests')
               .select('id, nanny_id, client_id, payment_status')
@@ -376,8 +422,11 @@ export default function FindNanny() {
                 description: "Could not find interest record. Please contact support.",
                 variant: "destructive"
               });
+              isProcessingRedirect.current = false;
               return;
             }
+
+            console.log('✅ Interest found:', interestData.id);
 
             // Verify client owns this interest
             if (interestData.client_id !== clientData.id) {
@@ -387,6 +436,7 @@ export default function FindNanny() {
                 description: "This payment does not belong to your account.",
                 variant: "destructive"
               });
+              isProcessingRedirect.current = false;
               return;
             }
 
@@ -397,74 +447,97 @@ export default function FindNanny() {
                 title: "Already Paid",
                 description: "This interest has already been paid.",
               });
-            } else {
-              // Create payment record
-              const { error: paymentError } = await supabase
-                .from('payments')
-                .insert({
-                  client_id: clientData.id,
-                  nanny_id: interestData.nanny_id,
-                  interest_id: interestId,
-                  amount: 200.00,
-                  status: 'completed',
-                  payment_method: 'flutterwave',
-                  transaction_id: transactionId,
-                  created_at: new Date().toISOString()
-                });
+              
+              setTimeout(() => {
+                if (!isMounted) return;
+                window.history.replaceState({}, document.title, '/find-nanny');
+                setRefreshCount(prev => prev + 1);
+                fetchExistingInterests();
+                console.log('✅ Page refresh triggered');
+                isProcessingRedirect.current = false;
+              }, 2000);
+              
+              return;
+            }
 
-              if (paymentError) {
-                console.error('❌ Error creating payment:', paymentError);
-                throw paymentError;
-              }
-              console.log('✅ Payment record created');
+            // Create payment record
+            console.log('💰 Creating payment record...');
+            const { error: paymentError } = await supabase
+              .from('payments')
+              .insert({
+                client_id: clientData.id,
+                nanny_id: interestData.nanny_id,
+                interest_id: interestId,
+                amount: 200.00,
+                status: 'completed',
+                payment_method: 'flutterwave',
+                transaction_id: transactionId,
+                created_at: new Date().toISOString()
+              });
 
-              // Update interest
-              const { error: interestUpdateError } = await supabase
-                .from('interests')
-                .update({
-                  payment_status: 'completed',
-                  status: 'approved'
-                })
-                .eq('id', interestId);
+            if (paymentError) {
+              console.error('❌ Error creating payment:', paymentError);
+              throw paymentError;
+            }
+            console.log('✅ Payment record created');
 
-              if (interestUpdateError) {
-                console.error('❌ Error updating interest:', interestUpdateError);
-                throw interestUpdateError;
-              }
-              console.log('✅ Interest updated');
+            // Update interest
+            console.log('🔄 Updating interest payment status...');
+            const { error: interestUpdateError } = await supabase
+              .from('interests')
+              .update({
+                payment_status: 'completed',
+                status: 'approved'
+              })
+              .eq('id', interestId);
 
-              // Get nanny and client info for email
-              const { data: nannyData } = await supabase
-                .from('nannies')
-                .select('first_name, last_name, email, phone')
-                .eq('id', interestData.nanny_id)
-                .single();
+            if (interestUpdateError) {
+              console.error('❌ Error updating interest:', interestUpdateError);
+              throw interestUpdateError;
+            }
+            console.log('✅ Interest updated');
 
-              const { data: clientProfile } = await supabase
-                .from('profiles')
-                .select('first_name, last_name, email')
-                .eq('id', user.id)
-                .single();
+            // Get nanny and client info for email
+            const { data: nannyData } = await supabase
+              .from('nannies')
+              .select('first_name, last_name, email, phone')
+              .eq('id', interestData.nanny_id)
+              .single();
 
-              // Send email
-              if (nannyData && clientProfile) {
-                console.log('📧 Sending success email...');
+            const { data: clientProfile } = await supabase
+              .from('profiles')
+              .select('first_name, last_name, email')
+              .eq('id', user.id)
+              .single();
+
+            // Send email
+            if (nannyData && clientProfile) {
+              console.log('📧 Sending success email...');
+              try {
                 await sendPaymentSuccessEmail(clientProfile, nannyData);
+                console.log('✅ Email sent');
+              } catch (emailError) {
+                console.error('❌ Email sending error:', emailError);
+                // Don't fail the whole process if email fails
               }
             }
           }
 
+          console.log('🎉 Showing success toast...');
           toast({
             title: "🎉 Payment Successful!",
             description: "Contact details have been unlocked. The page will refresh...",
           });
 
           // Clear URL and refresh
+          console.log('🔄 Clearing URL and refreshing...');
           setTimeout(() => {
+            if (!isMounted) return;
             window.history.replaceState({}, document.title, '/find-nanny');
             setRefreshCount(prev => prev + 1);
             fetchExistingInterests();
             console.log('✅ Page refresh triggered');
+            isProcessingRedirect.current = false;
           }, 2000);
 
         } catch (error: any) {
@@ -474,17 +547,17 @@ export default function FindNanny() {
             description: error.message || "There was an error processing your payment. Please contact support.",
             variant: "destructive"
           });
-        } finally {
-          // Reset after delay
-          setTimeout(() => {
-            isProcessingRedirect.current = false;
-          }, 3000);
+          isProcessingRedirect.current = false;
         }
       }
     };
 
     handlePaymentRedirect();
-  }, [user, userRole, window.location.search]);
+    
+    return () => {
+      isMounted = false;
+    };
+  }, [user, userRole, window.location.search, toast]);
 
   useEffect(() => {
     fetchNannies();

@@ -1072,17 +1072,28 @@ export default function Profile() {
               <div className="border-t pt-4">
                 <h4 className="font-medium mb-2">Password</h4>
                 <p className="text-sm text-muted-foreground mb-4">
-                  To change your password, you'll need to reset it via email.
+                  To change your password, you'll need to email admin@nannyplacements.co.za 
                 </p>
-                <Button variant="outline">Reset Password</Button>
-              </div>
-
+              
+              </div>             
               <div className="border-t pt-4">
                 <h4 className="font-medium mb-2 text-destructive">Danger Zone</h4>
                 <p className="text-sm text-muted-foreground mb-4">
-                  Permanently delete your account and all associated data.
+                  To delete your account, please email <strong>admin@nannyplacementssouthafrica.co.za </strong> 
+                  using your registered email address.
                 </p>
-                <Button variant="destructive">Delete Account</Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => {
+                    const subject = encodeURIComponent("Account Deletion Request");
+                    const body = encodeURIComponent(
+                      "Hello Admin,\n\nI would like to request the deletion of my account.\n\nRegistered email: [Your Email Here]\n\nThank you."
+                    );
+                    window.location.href = `mailto:admin@nannyplacementssouthafrica.co.za?subject=${subject}&body=${body}`;
+                  }}
+                >
+                  Email Admin to Delete Account
+                </Button>
               </div>
             </CardContent>
           </Card>

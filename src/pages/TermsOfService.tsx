@@ -213,7 +213,7 @@ export default function TermsOfService() {
               <div className="space-y-2 text-muted-foreground">
                 <p><strong>Email:</strong> admin@nannyplacementssouthafrica.co.za</p>
                 
-                <p><strong>Address:</strong> Johannesburg, South Africa</p>
+                <p><strong>Address:</strong> Centurion, South Africa</p>
               </div>
             </CardContent>
           </Card>

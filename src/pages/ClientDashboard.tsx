@@ -316,7 +316,7 @@ export default function ClientDashboard() {
       customizations: {
         title: "Unlock Nanny Contact",
         description: `Pay to contact ${nannyFirstName}`,
-        logo: "public\favicon.ico",
+        logo: "/favicon.ico",
       },
     });
   };

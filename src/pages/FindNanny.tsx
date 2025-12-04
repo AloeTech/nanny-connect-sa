@@ -568,7 +568,7 @@ export default function FindNanny() {
         customizations: {
           title: "Nanny Placements SA",
           description: `Payment to unlock ${nanny.profiles.first_name}'s contact details`,
-          logo: "https://your-logo-url.com/logo.png",
+          logo: "/favicon.ico",
         },
         callback: async (response: any) => {
           console.log('Payment response:', response);

@@ -10,7 +10,6 @@ import { Heart, MapPin, CheckCircle, X, Eye, CreditCard } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import emailjs from '@emailjs/browser';
 
 // Initialize Flutterwave script
 declare global {
@@ -107,6 +106,29 @@ const languagesOptions = [
   'Afrikaans', 'English', 'Zulu', 'Xhosa', 'Sotho', 'Tswana',
   'Pedi', 'Venda', 'Tsonga', 'Swati', 'Ndebele', 'Shona', 'Chewa'
 ];
+
+// Email sending function using your PHP endpoint
+const sendEmailViaPHP = async (emailData: any) => {
+  try {
+    const response = await fetch('/send-contact-email.php', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(emailData),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to send email');
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Email sending error:', error);
+    throw error;
+  }
+};
 
 export default function FindNanny() {
   const { user, userRole } = useAuth();
@@ -300,6 +322,33 @@ export default function FindNanny() {
            interest.admin_approved === true;
   };
 
+  const sendInterestNotificationEmails = async (nanny: Nanny, clientProfile: any, message: string) => {
+    try {
+      // Send to nanny
+      const nannyEmailData = {
+        to: nanny.profiles.email,
+        subject: 'New Client Interest - Nanny Placements SA',
+        message: `Hello ${nanny.profiles.first_name} ${nanny.profiles.last_name || ''},\n\nYou have received a new interest request from a client.\n\nClient: ${clientProfile.first_name} ${clientProfile.last_name || ''}\nClient Message: "${message}"\n\nPlease log in to your nanny dashboard to approve or decline this request.\n\nBest regards,\nNanny Placements SA Team`
+      };
+
+      await sendEmailViaPHP(nannyEmailData);
+
+      // Send to client
+      const clientEmailData = {
+        to: clientProfile.email,
+        subject: 'Interest Submitted - Nanny Placements SA',
+        message: `Hello ${clientProfile.first_name} ${clientProfile.last_name || ''},\n\nYou have successfully expressed interest in ${nanny.profiles.first_name} ${nanny.profiles.last_name || ''}.\n\nYour message: "${message}"\n\nPlease log in to your account to approve or decline this interest once the nanny responds.\n\nBest regards,\nNanny Placements SA Team`
+      };
+
+      await sendEmailViaPHP(clientEmailData);
+
+      return true;
+    } catch (error) {
+      console.error('Error sending interest notification emails:', error);
+      return false;
+    }
+  };
+
   const handleExpressInterest = async () => {
     if (!selectedNanny || !user) return;
 
@@ -384,33 +433,8 @@ export default function FindNanny() {
 
       if (error) throw error;
 
-      const nannyEmailParams = {
-        serviceID: "service_syqn4ol",
-        templateID: "template_exkrbne",
-        publicKey: "rK97vwvxnXTTY8PjW",
-        templateParams: {
-          name: `${selectedNanny.profiles.first_name} ${selectedNanny.profiles.last_name || ''}`,
-          email: selectedNanny.profiles.email,
-          subject: 'New Client Interest - Nanny Placements SA',
-          message: `You have received a new interest request from a client.\n\nClient Message: "${interestMessage}"\n\nPlease log in to your nanny dashboard to approve or decline this request.\n\nBest regards,\nNanny Placements SA Team`,
-          to_email: selectedNanny.profiles.email,
-        }
-      };
-      await emailjs.send(nannyEmailParams.serviceID, nannyEmailParams.templateID, nannyEmailParams.templateParams, nannyEmailParams.publicKey);
-
-      const clientEmailParams = {
-        serviceID: "service_syqn4ol",
-        templateID: "template_exkrbne",
-        publicKey: "rK97vwvxnXTTY8PjW",
-        templateParams: {
-          name: `${clientProfile.first_name} ${clientProfile.last_name || ''}`,
-          email: clientProfile.email,
-          subject: 'Interest Submitted - Nanny Placements SA',
-          message: `You have successfully expressed interest in ${selectedNanny.profiles.first_name} ${selectedNanny.profiles.last_name || ''}.\n\nPlease log in to your account to approve or decline this interest once the nanny responds.\n\nBest regards,\nNanny Placements SA Team`,
-          to_email: clientProfile.email,
-        }
-      };
-      await emailjs.send(clientEmailParams.serviceID, clientEmailParams.templateID, clientEmailParams.templateParams, clientEmailParams.publicKey);
+      // Send notification emails using PHP endpoint
+      await sendInterestNotificationEmails(selectedNanny, clientProfile, interestMessage);
 
       toast({
         title: "Interest Sent!",
@@ -460,23 +484,16 @@ export default function FindNanny() {
     }
   };
 
-  // Send email after successful payment
+  // Send email after successful payment using PHP endpoint
   const sendPaymentSuccessEmail = async (clientProfile: any, nanny: Nanny) => {
     try {
-      const emailParams = {
-        serviceID: "service_syqn4ol",
-        templateID: "template_exkrbne",
-        publicKey: "rK97vwvxnXTTY8PjW",
-        templateParams: {
-          name: `${clientProfile?.first_name} ${clientProfile?.last_name || ''}`,
-          email: clientProfile?.email || user?.email || "",
-          subject: 'Nanny Contact Details Unlocked - Nanny Placements SA',
-          message: `Congratulations! You have successfully unlocked ${nanny.profiles.first_name} ${nanny.profiles.last_name || ''}'s contact details.\n\nNanny Information:\n- Name: ${nanny.profiles.first_name} ${nanny.profiles.last_name || ''}\n- Email: ${nanny.profiles.email}\n- Phone: ${nanny.profiles.phone || 'Not provided'}\n\nPlease contact the nanny directly to schedule an interview. We recommend:\n1. Call or message to introduce yourself\n2. Schedule a meeting time\n3. Discuss your requirements and expectations\n\nBest regards,\nNanny Placements SA Team`,
-          to_email: clientProfile?.email || user?.email || "",
-        }
+      const emailData = {
+        to: clientProfile?.email || user?.email || "",
+        subject: 'Nanny Contact Details Unlocked - Nanny Placements SA',
+        message: `Congratulations ${clientProfile?.first_name} ${clientProfile?.last_name || ''}!\n\nYou have successfully unlocked ${nanny.profiles.first_name} ${nanny.profiles.last_name || ''}'s contact details.\n\nNanny Information:\n- Name: ${nanny.profiles.first_name} ${nanny.profiles.last_name || ''}\n- Email: ${nanny.profiles.email}\n- Phone: ${nanny.profiles.phone || 'Not provided'}\n\nPlease contact the nanny directly to schedule an interview. We recommend:\n1. Call or message to introduce yourself\n2. Schedule a meeting time\n3. Discuss your requirements and expectations\n\nBest regards,\nNanny Placements SA Team`
       };
 
-      await emailjs.send(emailParams.serviceID, emailParams.templateID, emailParams.templateParams, emailParams.publicKey);
+      await sendEmailViaPHP(emailData);
       console.log('Payment success email sent successfully');
       return true;
     } catch (emailError) {
@@ -597,7 +614,7 @@ export default function FindNanny() {
                 return;
               }
 
-              // Send email to client with nanny contact details
+              // Send email to client with nanny contact details using PHP endpoint
               const emailSent = await sendPaymentSuccessEmail(clientProfile, nanny);
 
               toast({

@@ -397,7 +397,7 @@ Nanny Placements SA Team`
     <div className="container mx-auto px-4 py-8">
       <div className="mb-8">
         <h1 className="text-3xl font-bold">Nanny Dashboard</h1>
-        <p className="text-muted-foreground">Welcome back, {userProfile?.first_name}!</p>
+        <p className="text-muted-foreground">Welcome back, {userProfile?.first_name} {userProfile?.last_name}!</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

@@ -6,11 +6,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { Heart, CreditCard, Calendar, User, MapPin, Clock, DollarSign, Eye, Edit } from 'lucide-react';
+import { Heart, CreditCard, Calendar, User, MapPin, Clock, DollarSign, Eye, Edit, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface ClientProfile {
   id: string;
@@ -67,28 +66,6 @@ interface Payment {
   nanny_id: string;
   transaction_id: string | null;
 }
-
-// New function to send email via Afrihost PHP
-const sendEmail = async (to: string, subject: string, message: string) => {
-  try {
-    const response = await fetch('https://nannyplacementssouthafrica.co.za/send-contact-email.php', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        to, 
-        subject, 
-        message 
-        // Remove 'type' parameter since PHP no longer uses it
-      })
-    });
-    
-    if (!response.ok) throw new Error('Email failed');
-    return await response.json();
-  } catch (error) {
-    console.error('Email error:', error);
-    return { success: false };
-  }
-};
 
 export default function ClientDashboard() {
   const { user, userRole } = useAuth();
@@ -188,139 +165,6 @@ export default function ClientDashboard() {
     }
   };
 
-  const handleFlutterwavePayment = async (interest: Interest) => {
-    // Prevent multiple payments for the same interest
-    if (interest.payment_status === 'completed') {
-      toast({ 
-        title: "Already Paid", 
-        description: "You have already paid for this nanny's contact details." 
-      });
-      return;
-    }
-
-    if (!userProfile || !clientProfile) {
-      toast({ title: "Error", description: "Profile not loaded", variant: "destructive" });
-      return;
-    }
-
-    const nannyFirstName = interest.nannies.profiles.first_name;
-    const nannyFullName = `${interest.nannies.profiles.first_name} ${interest.nannies.profiles.last_name}`;
-    const nannyEmail = interest.nannies.profiles.email;
-    const nannyPhone = interest.nannies.profiles.phone || 'Not provided';
-    const clientName = `${userProfile.first_name} ${userProfile.last_name}`;
-    const clientEmail = userProfile.email;
-    const clientPhone = userProfile.phone || 'Not provided';
-
-    const FlutterwaveCheckout = (window as any).FlutterwaveCheckout;
-
-    if (!FlutterwaveCheckout) {
-      toast({ title: "Error", description: "Payment system not ready. Try again.", variant: "destructive" });
-      return;
-    }
-
-    const flutterwavePublicKey = import.meta.env.VITE_FLUTTERWAVE_PUBLIC_KEY;
-
-    // Use it in FlutterwaveCheckout
-    FlutterwaveCheckout({
-      public_key: flutterwavePublicKey,
-      tx_ref: `nanny-int-${interest.id}-${Date.now()}`,
-      amount: 200,
-      currency: "ZAR",
-      payment_options: "card,mobilemoney,ussd",
-      customer: {
-        email: userProfile.email,
-        phone_number: userProfile.phone || "",
-        name: clientName,
-      },
-
-      callback: async (response: any) => {
-        if (response.status === "successful") {
-          try {
-            // Check again to prevent race conditions
-            const { data: currentInterest } = await supabase
-              .from('interests')
-              .select('payment_status')
-              .eq('id', interest.id)
-              .single();
-
-            if (currentInterest?.payment_status === 'completed') {
-              toast({ 
-                title: "Already Paid", 
-                description: "This interest has already been paid for." 
-              });
-              return;
-            }
-
-            // Create payment record
-            const { error: payError } = await supabase
-              .from('payments')
-              .insert({
-                client_id: clientProfile.id,
-                nanny_id: interest.nanny_id,
-                interest_id: interest.id,
-                amount: 200.00,
-                status: 'completed',
-                payment_method: 'flutterwave_card',
-                transaction_id: response.transaction_id
-              });
-
-            if (payError) throw payError;
-
-            // Update interest payment status
-            const { error: updateError } = await supabase
-              .from('interests')
-              .update({ payment_status: 'completed' })
-              .eq('id', interest.id);
-
-            if (updateError) throw updateError;
-
-            // Update local state immediately
-            setInterests(prev => prev.map(i => 
-              i.id === interest.id ? { ...i, payment_status: 'completed' } : i
-            ));
-
-            // Send email to CLIENT with nanny contact details
-            const clientEmailSent = await sendEmail(
-              clientEmail,
-              `Interview Ready - Nanny Contact Details`,
-              `Congratulations ${userProfile.first_name}!\n\nYour payment was successful.\n\nHere are ${nannyFirstName}'s full contact details:\n\n• Full Name: ${nannyFullName}\n• Email: ${nannyEmail}\n• Phone: ${nannyPhone}\n\nYou can now contact ${nannyFirstName} directly to arrange your interview.\n\nBest regards,\nNanny Placements SA Team`
-            );
-
-            // Send email to NANNY to notify them
-            const nannyEmailSent = await sendEmail(
-              
-            nannyEmail,
-            `A Client Has Access To Your Contact Details - Nanny Placements SA`,
-            `Hi ${nannyFirstName},\n\nA Client now has your full contact information and may contact you directly to arrange an interview.\n\nPlease ensure you are ready and available to schedule and attend the interview promptly.\n\nBest regards,\nNanny Placements SA Team`
-
-            );
-
-            toast({
-              title: "Payment Successful!",
-              description: `You've unlocked ${nannyFirstName}'s contact details.${clientEmailSent ? ' Check your email!' : ' (Email sending failed, contact support for details)'}`,
-            });
-
-          } catch (err: any) {
-            console.error("Payment processing failed:", err);
-            toast({
-              title: "Payment Failed",
-              description: "Please try again or contact support.",
-              variant: "destructive"
-            });
-          }
-        } else {
-          toast({ title: "Payment Failed", description: "Please try again.", variant: "destructive" });
-        }
-      },
-      onclose: () => {},
-      customizations: {
-        title: "Unlock Nanny Contact",
-        description: `Pay to contact ${nannyFirstName}`,
-        logo: "/favicon.ico",
-      },
-    });
-  };
-
   const handleSaveProfile = async () => {
     try {
       if (editedUserProfile) {
@@ -398,238 +242,353 @@ export default function ClientDashboard() {
   }
 
   return (
-    <>
-      <script src="https://checkout.flutterwave.com/v3.js" async></script>
+    <div className="container mx-auto px-4 py-8">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold">Client Dashboard</h1>
+        <p className="text-muted-foreground">Manage your nanny search and bookings</p>
+      </div>
 
-      <div className="container mx-auto px-4 py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold">Client Dashboard</h1>
-          <p className="text-muted-foreground">Manage your nanny search and bookings</p>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-2">
-                    <Heart className="h-5 w-5 text-primary" />
-                    <div>
-                      <p className="text-2xl font-bold">{interests.length}</p>
-                      <p className="text-sm text-muted-foreground">Interests Sent</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-2">
-                    <CreditCard className="h-5 w-5 text-green-500" />
-                    <div>
-                      <p className="text-2xl font-bold">{payments.filter(p => p.status === 'completed').length}</p>
-                      <p className="text-sm text-muted-foreground">Payments Made</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            
-            </div>
-
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Heart className="h-5 w-5" />
-                  Expressed Interests
-                </CardTitle>
-                <CardDescription>Track your nanny interest requests</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {interests.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Eye className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                    <p className="text-muted-foreground">No interests expressed yet</p>
-                    <Link to="/find-nanny">
-                      <Button className="mt-4">Find Nannies</Button>
-                    </Link>
+              <CardContent className="p-6">
+                <div className="flex items-center gap-2">
+                  <Heart className="h-5 w-5 text-primary" />
+                  <div>
+                    <p className="text-2xl font-bold">{interests.length}</p>
+                    <p className="text-sm text-muted-foreground">Interests Sent</p>
                   </div>
-                ) : (
-                  <div className="space-y-4">
-                    {interests.map((interest) => {
-                      const nannyFirstName = interest.nannies.profiles.first_name;
-                      const isApproved = interest.nanny_response === 'approved';
-                      const isPaid = interest.payment_status === 'completed';
-
-                      return (
-                        <div key={interest.id} className="border rounded-lg p-6 bg-white shadow-sm">
-                          <div className="flex justify-between items-start mb-4">
-                            <div>
-                              <p className="text-xl font-bold text-gray-900">
-                                {nannyFirstName}
-                              </p>
-                              <p className="text-sm text-muted-foreground mt-1">
-                                Interest sent on {new Date(interest.created_at).toLocaleDateString()}
-                              </p>
-                            </div>
-                            {getStatusBadge(interest.nanny_response)}
-                          </div>
-
-                          {isApproved && !isPaid && (
-                            <div className="flex gap-3">
-                              <Button
-                                onClick={() => handleFlutterwavePayment(interest)}
-                                className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-semibold text-lg py-6"
-                                size="lg"
-                              >
-                                <CreditCard className="h-6 w-6 mr-3" />
-                                Pay R200 to Unlock Contact Details
-                              </Button>
-                            </div>
-                          )}
-
-                          {isPaid && (
-                            <div className="bg-gradient-to-r from-emerald-50 to-green-50 border-2 border-emerald-400 rounded-xl p-6 text-center">
-                              <p className="text-2xl font-bold text-emerald-800 mb-2">
-                                ✓ Payment Successful!
-                              </p>
-                              <p className="text-emerald-700 font-medium">
-                                {nannyFirstName}'s full name, email, and phone number have been sent to your email.
-                              </p>
-                              <p className="text-sm text-emerald-600 mt-3">
-                                You can now arrange your interview directly. The nanny has been notified.
-                              </p>
-                            </div>
-                          )}
-
-                          {!isApproved && interest.nanny_response === 'pending' && (
-                            <div className="text-center py-4">
-                              <p className="text-amber-700 font-medium flex items-center justify-center gap-2">
-                                <Clock className="h-5 w-5" />
-                                Waiting for {nannyFirstName} to accept your request...
-                              </p>
-                            </div>
-                          )}
-
-                          {interest.nanny_response === 'declined' && (
-                            <div className="text-center py-4">
-                              <p className="text-red-600 font-semibold">
-                                {nannyFirstName} has declined your request
-                              </p>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+                </div>
               </CardContent>
             </Card>
-
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <CreditCard className="h-5 w-5" />
-                  Payment History
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {payments.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">No payments yet</p>
-                ) : (
-                  <div className="space-y-3">
-                    {payments.map((p) => (
-                      <div key={p.id} className="flex justify-between items-center border rounded-lg p-4">
-                        <div>
-                          <p className="font-medium">R{p.amount.toFixed(2)}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {new Date(p.created_at).toLocaleDateString()}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            Transaction: {p.transaction_id || 'N/A'}
-                          </p>
-                        </div>
-                        {getPaymentStatusBadge(p.status)}
-                      </div>
-                    ))}
+              <CardContent className="p-6">
+                <div className="flex items-center gap-2">
+                  <CreditCard className="h-5 w-5 text-green-500" />
+                  <div>
+                    <p className="text-2xl font-bold">{payments.filter(p => p.status === 'completed').length}</p>
+                    <p className="text-sm text-muted-foreground">Payments Made</p>
                   </div>
-                )}
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center gap-2">
+                  <Eye className="h-5 w-5 text-blue-500" />
+                  <div>
+                    <p className="text-2xl font-bold">{interests.filter(i => i.payment_status === 'completed').length}</p>
+                    <p className="text-sm text-muted-foreground">Contact Details Unlocked</p>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </div>
 
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <User className="h-5 w-5" />
-                  Your Profile
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {isEditing ? (
-                  <div className="space-y-4">
-                    <div>
-                      <Label>First Name</Label>
-                      <Input value={editedUserProfile?.first_name || ''} onChange={(e) => setEditedUserProfile(prev => ({ ...prev!, first_name: e.target.value }))} />
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Heart className="h-5 w-5" />
+                Expressed Interests
+              </CardTitle>
+              <CardDescription>Track your nanny interest requests</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {interests.length === 0 ? (
+                <div className="text-center py-8">
+                  <Eye className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-muted-foreground">No interests expressed yet</p>
+                  <Link to="/find-nanny">
+                    <Button className="mt-4">Find Nannies</Button>
+                  </Link>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {interests.map((interest) => {
+                    const nannyFirstName = interest.nannies.profiles.first_name;
+                    const isApproved = interest.nanny_response === 'approved';
+                    const isPaid = interest.payment_status === 'completed';
+
+                    return (
+                      <div key={interest.id} className="border rounded-lg p-6 bg-white shadow-sm">
+                        <div className="flex justify-between items-start mb-4">
+                          <div>
+                            <p className="text-xl font-bold text-gray-900">
+                              {nannyFirstName}
+                            </p>
+                            <p className="text-sm text-muted-foreground mt-1">
+                              Interest sent on {new Date(interest.created_at).toLocaleDateString()}
+                            </p>
+                          </div>
+                          {getStatusBadge(interest.nanny_response)}
+                        </div>
+
+                        {isApproved && !isPaid && (
+                          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                            <p className="font-medium text-yellow-800 mb-2">
+                              🎉 Approved! Ready for Payment
+                            </p>
+                            <p className="text-sm text-yellow-700">
+                              {nannyFirstName} has approved your interest request.
+                            </p>
+                            <Link to="/find-nanny">
+                              <Button className="mt-3 w-full">
+                                <ArrowRight className="h-4 w-4 mr-2" />
+                                Go to Find Nanny to Complete Payment
+                              </Button>
+                            </Link>
+                          </div>
+                        )}
+
+                        {isPaid && (
+                          <div className="bg-gradient-to-r from-emerald-50 to-green-50 border-2 border-emerald-400 rounded-xl p-6 text-center">
+                            <p className="text-2xl font-bold text-emerald-800 mb-2">
+                              ✓ Contact Details Unlocked!
+                            </p>
+                            <p className="text-emerald-700 font-medium">
+                              {nannyFirstName}'s full contact details have been sent to your email.
+                            </p>
+                            <p className="text-sm text-emerald-600 mt-3">
+                              Check your email for {nannyFirstName}'s phone number and email address.
+                              You can now arrange your interview directly.
+                            </p>
+                          </div>
+                        )}
+
+                        {!isApproved && interest.nanny_response === 'pending' && (
+                          <div className="text-center py-4">
+                            <p className="text-amber-700 font-medium flex items-center justify-center gap-2">
+                              <Clock className="h-5 w-5" />
+                              Waiting for {nannyFirstName} to accept your request...
+                            </p>
+                          </div>
+                        )}
+
+                        {interest.nanny_response === 'declined' && (
+                          <div className="text-center py-4">
+                            <p className="text-red-600 font-semibold">
+                              {nannyFirstName} has declined your request
+                            </p>
+                            <p className="text-sm text-muted-foreground mt-2">
+                              Don't be discouraged! There are many other qualified nannies available.
+                            </p>
+                            <Link to="/find-nanny">
+                              <Button variant="outline" className="mt-3">
+                                Browse More Nannies
+                              </Button>
+                            </Link>
+                          </div>
+                        )}
+
+                        {interest.message && (
+                          <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+                            <p className="text-sm font-medium text-gray-700">Your Message:</p>
+                            <p className="text-sm text-gray-600 mt-1">"{interest.message}"</p>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <CreditCard className="h-5 w-5" />
+                Payment History
+              </CardTitle>
+              <CardDescription>All your successful payments</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {payments.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">No payments yet</p>
+              ) : (
+                <div className="space-y-3">
+                  {payments.map((p) => (
+                    <div key={p.id} className="flex justify-between items-center border rounded-lg p-4 hover:bg-gray-50 transition-colors">
+                      <div>
+                        <p className="font-medium">R{p.amount.toFixed(2)} - Nanny Contact Unlock</p>
+                        <p className="text-sm text-muted-foreground">
+                          {new Date(p.created_at).toLocaleDateString('en-ZA', {
+                            weekday: 'short',
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </p>
+                        {p.transaction_id && (
+                          <p className="text-xs text-muted-foreground">
+                            Transaction ID: {p.transaction_id}
+                          </p>
+                        )}
+                      </div>
+                      {getPaymentStatusBadge(p.status)}
                     </div>
-                    <div>
-                      <Label>Last Name</Label>
-                      <Input value={editedUserProfile?.last_name || ''} onChange={(e) => setEditedUserProfile(prev => ({ ...prev!, last_name:  e.target.value }))} />
-                    </div>
-                    <div>
-                      <Label>Phone</Label>
-                      <Input value={editedUserProfile?.phone || ''} onChange={(e) => setEditedUserProfile(prev => ({ ...prev!, phone: e.target.value }))} />
-                    </div>
-                    <div>
-                      <Label>City</Label>
-                      <Input value={editedUserProfile?.city || ''} onChange={(e) => setEditedUserProfile(prev => ({ ...prev!, city: e.target.value }))} />
-                    </div>
-                    <div>
-                      <Label>Suburb</Label>
-                      <Input value={editedUserProfile?.suburb || ''} onChange={(e) => setEditedUserProfile(prev => ({ ...prev!, suburb: e.target.value }))} />
-                    </div>
-                    <div className="flex gap-2">
-                      <Button onClick={handleSaveProfile}>Save</Button>
-                      <Button variant="outline" onClick={() => setIsEditing(false)}>Cancel</Button>
-                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <User className="h-5 w-5" />
+                Your Profile
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {isEditing ? (
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="first-name">First Name *</Label>
+                    <Input 
+                      id="first-name"
+                      value={editedUserProfile?.first_name || ''} 
+                      onChange={(e) => setEditedUserProfile(prev => ({ ...prev!, first_name: e.target.value }))} 
+                    />
                   </div>
-                ) : (
+                  <div>
+                    <Label htmlFor="last-name">Last Name *</Label>
+                    <Input 
+                      id="last-name"
+                      value={editedUserProfile?.last_name || ''} 
+                      onChange={(e) => setEditedUserProfile(prev => ({ ...prev!, last_name: e.target.value }))} 
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="phone">Phone *</Label>
+                    <Input 
+                      id="phone"
+                      value={editedUserProfile?.phone || ''} 
+                      onChange={(e) => setEditedUserProfile(prev => ({ ...prev!, phone: e.target.value }))} 
+                      placeholder="+27 82 123 4567"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="city">City *</Label>
+                    <Input 
+                      id="city"
+                      value={editedUserProfile?.city || ''} 
+                      onChange={(e) => setEditedUserProfile(prev => ({ ...prev!, city: e.target.value }))} 
+                      placeholder="Cape Town"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="suburb">Suburb</Label>
+                    <Input 
+                      id="suburb"
+                      value={editedUserProfile?.suburb || ''} 
+                      onChange={(e) => setEditedUserProfile(prev => ({ ...prev!, suburb: e.target.value }))} 
+                      placeholder="Sea Point"
+                    />
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <Button onClick={handleSaveProfile}>Save Changes</Button>
+                    <Button variant="outline" onClick={() => setIsEditing(false)}>Cancel</Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
                   <div>
                     <p className="font-semibold text-lg">{userProfile?.first_name} {userProfile?.last_name}</p>
                     <p className="text-sm text-muted-foreground">{userProfile?.email}</p>
-                    {userProfile?.phone && <p className="text-sm text-muted-foreground">{userProfile.phone}</p>}
-                    <Button variant="outline" className="w-full mt-4" onClick={() => setIsEditing(true)}>
-                      <Edit className="h-4 w-4 mr-2" /> Edit Profile
-                    </Button>
                   </div>
-                )}
-              </CardContent>
-            </Card>
+                  
+                  {userProfile?.phone && (
+                    <div>
+                      <p className="text-sm font-medium">Phone</p>
+                      <p className="text-sm text-muted-foreground">{userProfile.phone}</p>
+                    </div>
+                  )}
+                  
+                  <div>
+                    <p className="text-sm font-medium">Location</p>
+                    <p className="text-sm text-muted-foreground">
+                      {userProfile?.suburb ? `${userProfile.suburb}, ` : ''}{userProfile?.city || 'Not specified'}
+                    </p>
+                  </div>
+                  
+                  <Button variant="outline" className="w-full" onClick={() => setIsEditing(true)}>
+                    <Edit className="h-4 w-4 mr-2" /> Edit Profile
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
-            <Card>
-              <CardHeader><CardTitle>Quick Actions</CardTitle></CardHeader>
-              <CardContent>
+          <Card>
+            <CardHeader>
+              <CardTitle>Quick Actions</CardTitle>
+              <CardDescription>Manage your nanny search</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Link to="/find-nanny">
+                <Button className="w-full justify-start">
+                  <Heart className="h-4 w-4 mr-2" />
+                  Find More Nannies
+                </Button>
+              </Link>
+              
+              {interests.filter(i => i.nanny_response === 'approved' && i.payment_status !== 'completed').length > 0 && (
                 <Link to="/find-nanny">
-                  <Button className="w-full">Find More Nannies</Button>
+                  <Button variant="default" className="w-full justify-start bg-green-600 hover:bg-green-700">
+                    <CreditCard className="h-4 w-4 mr-2" />
+                    Complete Pending Payments
+                  </Button>
                 </Link>
-              </CardContent>
-            </Card>
+              )}
+              
+              {interests.filter(i => i.payment_status === 'completed').length > 0 && (
+                <Link to="/find-nanny">
+                  <Button variant="outline" className="w-full justify-start">
+                    <Eye className="h-4 w-4 mr-2" />
+                    View Unlocked Contacts
+                  </Button>
+                </Link>
+              )}
+            </CardContent>
+          </Card>
 
-            <Card className="border-yellow-200 bg-yellow-50">
-              <CardHeader>
-                <CardTitle className="text-yellow-800">Safety First</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ul className="text-sm text-yellow-800 space-y-1">
-                  <li>• Always meet in public</li>
-                  <li>• Bring a friend</li>
-                  <li>• Verify references</li>
-                  <li>• Follow labor laws</li>
-                </ul>
-              </CardContent>
-            </Card>
-          </div>
+          <Card className="border-blue-200 bg-blue-50">
+            <CardHeader>
+              <CardTitle className="text-blue-800 flex items-center gap-2">
+                <MapPin className="h-5 w-5" />
+                Need Help?
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-sm font-medium text-blue-800">Email Support</p>
+                  <p className="text-sm text-blue-700">admin@nannyplacementssouthafrica.co.za</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-blue-800">Payment Issues?</p>
+                  <p className="text-sm text-blue-700">Contact us if you paid but didn't receive contact details</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-blue-800">Interview Tips</p>
+                  <ul className="text-sm text-blue-700 space-y-1 mt-1">
+                    <li>• Prepare questions in advance</li>
+                    <li>• Discuss expectations clearly</li>
+                    <li>• Verify references</li>
+                    <li>• Discuss salary and hours upfront</li>
+                  </ul>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
-    </>
+    </div>
   );
 }

@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Heart, MapPin, CheckCircle, X, Eye, CreditCard } from "lucide-react";
+import { Heart, MapPin, CheckCircle, X, Eye, CreditCard, Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -70,7 +70,7 @@ interface Interest {
   created_at: string;
   admin_approved: boolean | null;
   nanny_response: string | null;
-  payment_status: string | null;
+  payment_status: string | null; // This is in interests table
   client_first_name: string | null;
   client_last_name: string | null;
   client_email: string | null;
@@ -183,10 +183,11 @@ const extractInterestId = (txRef: string): string | null => {
 
   return uuid;
 };
-// Email sending function using your PHP endpoint
-const sendEmailViaPHP = async (emailData: any) => {
+
+// NEW: Send interest notification using dedicated PHP endpoint
+const sendInterestNotificationEmail = async (emailData: any): Promise<{success: boolean, message?: string}> => {
   try {
-    const response = await fetch('/send-contact-email.php', {
+    const response = await fetch('https://nannyplacementssouthafrica.co.za/send-interest-notification.php', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -194,20 +195,155 @@ const sendEmailViaPHP = async (emailData: any) => {
       body: JSON.stringify(emailData),
     });
 
+    const data = await response.json();
+    
     if (!response.ok) {
-      throw new Error('Failed to send email');
+      console.error('Interest notification API error:', data);
+      return { success: false, message: data.error };
     }
 
-    const data = await response.json();
-    return data;
+    console.log('Interest notification sent successfully:', data);
+    return { success: true, message: 'Interest notification sent successfully' };
   } catch (error) {
-    console.error('Email sending error:', error);
+    console.error('Interest notification sending error:', error);
+    return { success: false, message: 'Failed to send interest notification' };
+  }
+};
+
+// NEW: Send payment success email using dedicated PHP endpoint
+const sendPaymentSuccessEmail = async (emailData: any): Promise<{success: boolean, message?: string}> => {
+  try {
+    const response = await fetch('https://nannyplacementssouthafrica.co.za/send-payment-success.php', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(emailData),
+    });
+
+    const data = await response.json();
+    
+    if (!response.ok) {
+      console.error('Payment success API error:', data);
+      return { success: false, message: data.error };
+    }
+
+    console.log('Payment success email sent successfully:', data);
+    return { success: true, message: 'Payment success email sent successfully' };
+  } catch (error) {
+    console.error('Payment success email sending error:', error);
+    return { success: false, message: 'Failed to send payment success email' };
+  }
+};
+
+// Payment processing function
+const processPaymentSuccess = async (interestId: string, transactionId: string, clientData: any) => {
+  try {
+    console.log('🔄 Starting payment processing for interest:', interestId);
+    
+    // 1. First check if payment already exists
+    const { data: existingPayments, error: paymentCheckError } = await supabase
+      .from('payments')
+      .select('*')
+      .eq('transaction_id', transactionId);
+
+    if (paymentCheckError) {
+      console.error('❌ Error checking payments:', paymentCheckError);
+      throw paymentCheckError;
+    }
+
+    const existingPayment = existingPayments && existingPayments.length > 0 ? existingPayments[0] : null;
+
+    if (existingPayment) {
+      console.log('✅ Payment already exists in payments table');
+      
+      // Check if interest payment_status is already updated
+      const { data: existingInterest } = await supabase
+        .from('interests')
+        .select('payment_status')
+        .eq('id', interestId)
+        .single();
+
+      if (existingInterest && existingInterest.payment_status !== 'completed') {
+        // Update interest payment_status
+        console.log('🔄 Updating interest payment_status...');
+        const { error: interestUpdateError } = await supabase
+          .from('interests')
+          .update({
+            payment_status: 'completed',
+            status: 'approved'
+          })
+          .eq('id', interestId);
+
+        if (interestUpdateError) {
+          console.error('❌ Error updating interest payment_status:', interestUpdateError);
+          throw interestUpdateError;
+        }
+        console.log('✅ Interest payment_status updated to completed');
+      }
+      
+      return true;
+    }
+
+    // 2. Get interest details
+    console.log('🔍 Getting interest details...');
+    const { data: interestData, error: interestError } = await supabase
+      .from('interests')
+      .select('id, nanny_id, client_id, payment_status, status')
+      .eq('id', interestId)
+      .single();
+
+    if (interestError || !interestData) {
+      console.error('❌ Interest not found:', interestError);
+      throw new Error('Interest record not found');
+    }
+
+    // 3. Create payment record in payments table
+    console.log('💰 Creating payment record...');
+    const { error: paymentError } = await supabase
+      .from('payments')
+      .insert({
+        client_id: clientData.id,
+        nanny_id: interestData.nanny_id,
+        interest_id: interestId,
+        amount: 200.00,
+        status: 'completed', // This goes to payments.status column
+        payment_method: 'flutterwave',
+        transaction_id: transactionId,
+        created_at: new Date().toISOString()
+      });
+
+    if (paymentError) {
+      console.error('❌ Error creating payment record:', paymentError);
+      throw paymentError;
+    }
+    console.log('✅ Payment record created');
+
+    // 4. Update interest payment_status (in interests table)
+    console.log('🔄 Updating interest payment_status...');
+    const { error: interestUpdateError } = await supabase
+      .from('interests')
+      .update({
+        payment_status: 'completed', // This goes to interests.payment_status column
+        status: 'approved' // Also update the main status field
+      })
+      .eq('id', interestId);
+
+    if (interestUpdateError) {
+      console.error('❌ Error updating interest payment_status:', interestUpdateError);
+      throw interestUpdateError;
+    }
+    console.log('✅ Interest payment_status updated to completed');
+
+    return true;
+  } catch (error) {
+    console.error('❌ Error in payment processing:', error);
     throw error;
   }
 };
 
 export default function FindNanny() {
-  const { user, userRole } = useAuth();
+  const { user, userRole, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const [nannies, setNannies] = useState<Nanny[]>([]);
   const [loading, setLoading] = useState(true);
@@ -223,7 +359,7 @@ export default function FindNanny() {
     ageRange: ''
   });
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const isProcessingRedirect = useRef(false);
+  const hasProcessedRedirect = useRef(false);
 
   // Interest modal state
   const [selectedNanny, setSelectedNanny] = useState<Nanny | null>(null);
@@ -250,7 +386,18 @@ export default function FindNanny() {
   // Handle payment redirect after successful payment
   useEffect(() => {
     const handlePaymentRedirect = async () => {
-      // Check if we're returning from a successful payment
+      // Prevent multiple processing
+      if (hasProcessedRedirect.current) {
+        console.log('⏸️ Already processed redirect, skipping...');
+        return;
+      }
+
+      // Wait for auth to load
+      if (authLoading) {
+        console.log('⏳ Waiting for auth to load...');
+        return;
+      }
+
       const urlParams = new URLSearchParams(window.location.search);
       const status = urlParams.get('status');
       const txRef = urlParams.get('tx_ref');
@@ -258,34 +405,26 @@ export default function FindNanny() {
       
       console.log('🔍 Payment redirect check:', { status, txRef, transactionId });
       
-      // Prevent multiple processing
-      if (isProcessingRedirect.current) {
-        console.log('⏸️ Already processing redirect, skipping...');
-        return;
-      }
-      
       if (status === 'successful' && txRef && transactionId) {
-        isProcessingRedirect.current = true;
+        hasProcessedRedirect.current = true;
         console.log('✅ Payment successful redirect detected, starting processing...');
         
         try {
           // Get client info
           if (!user) {
-            toast({
-              title: "User Not Found",
-              description: "Please log in to complete payment processing.",
-              variant: "destructive"
-            });
+            console.log('⏸️ No user, skipping payment processing');
+            // Clear URL parameters
+            window.history.replaceState({}, document.title, window.location.pathname);
+            hasProcessedRedirect.current = false;
             return;
           }
 
           // Check if user has client role
           if (userRole !== 'client') {
-            toast({
-              title: "Access Denied",
-              description: "Only clients can make payments for nanny contacts.",
-              variant: "destructive"
-            });
+            console.log('⏸️ User is not a client');
+            // Clear URL parameters
+            window.history.replaceState({}, document.title, window.location.pathname);
+            hasProcessedRedirect.current = false;
             return;
           }
 
@@ -297,6 +436,8 @@ export default function FindNanny() {
               description: "Could not extract payment information. Please contact support.",
               variant: "destructive"
             });
+            window.history.replaceState({}, document.title, window.location.pathname);
+            hasProcessedRedirect.current = false;
             return;
           }
 
@@ -316,170 +457,137 @@ export default function FindNanny() {
               description: "Client information not found. Please complete your client profile.",
               variant: "destructive"
             });
+            window.history.replaceState({}, document.title, window.location.pathname);
+            hasProcessedRedirect.current = false;
             return;
           }
 
           console.log('👤 Client found:', clientData.id);
 
-          // Check if payment already exists
-          const { data: existingPayment } = await supabase
-            .from('payments')
-            .select('*')
-            .eq('transaction_id', transactionId)
+          // First, check if interest exists and get nanny_id
+          const { data: interestData, error: interestError } = await supabase
+            .from('interests')
+            .select('id, nanny_id, client_id, payment_status, status')
+            .eq('id', interestId)
             .single();
 
-          if (existingPayment) {
-            console.log('✅ Payment already exists:', existingPayment);
+          if (interestError || !interestData) {
+            console.error('❌ Interest not found:', interestError);
+            toast({
+              title: "Payment Record Error",
+              description: "Could not find interest record. Please contact support.",
+              variant: "destructive"
+            });
+            window.history.replaceState({}, document.title, window.location.pathname);
+            hasProcessedRedirect.current = false;
+            return;
+          }
+
+          // Verify client owns this interest
+          if (interestData.client_id !== clientData.id) {
+            console.error('❌ Client mismatch');
+            toast({
+              title: "Access Denied",
+              description: "This payment does not belong to your account.",
+              variant: "destructive"
+            });
+            window.history.replaceState({}, document.title, window.location.pathname);
+            hasProcessedRedirect.current = false;
+            return;
+          }
+
+          // Check if already paid in interests table
+          if (interestData.payment_status === 'completed') {
+            console.log('✅ Interest already paid (payment_status is completed)');
+            toast({
+              title: "Already Paid",
+              description: "This interest has already been paid.",
+            });
+            window.history.replaceState({}, document.title, window.location.pathname);
+            hasProcessedRedirect.current = false;
+            return;
+          }
+
+          // Process the payment
+          await processPaymentSuccess(interestId, transactionId, clientData);
+
+          // Get nanny and client info for email
+          const { data: nannyData } = await supabase
+            .from('nannies')
+            .select('first_name, last_name')
+            .eq('id', interestData.nanny_id)
+            .single();
+
+          const { data: clientProfile } = await supabase
+            .from('profiles')
+            .select('first_name, last_name, email')
+            .eq('id', user.id)
+            .single();
+
+          // Get nanny contact info from profiles table
+          const { data: nannyProfile } = await supabase
+            .from('profiles')
+            .select('phone, email')
+            .eq('id', interestData.nanny_id)
+            .single();
+
+          // Send payment success email (silently fail if email doesn't work)
+          if (nannyData && clientProfile) {
+            console.log('📧 Attempting to send payment success email...');
             
-            if (existingPayment.status === 'completed') {
-              toast({
-                title: "Payment Already Processed",
-                description: "This payment has already been recorded.",
-              });
-            } else {
-              // Update to completed
-              const { error: updateError } = await supabase
-                .from('payments')
-                .update({
-                  status: 'completed',
-                  updated_at: new Date().toISOString()
-                })
-                .eq('id', existingPayment.id);
-                
-              if (updateError) {
-                console.error('❌ Error updating payment:', updateError);
-                throw updateError;
-              }
-              console.log('✅ Payment updated to completed');
-            }
-          } else {
-            // Create new payment
-            console.log('🆕 Creating new payment record...');
-            
-            // First get interest to verify and get nanny_id
-            const { data: interestData, error: interestError } = await supabase
-              .from('interests')
-              .select('id, nanny_id, client_id, payment_status')
-              .eq('id', interestId)
-              .single();
+            const paymentEmailData = {
+              to: clientProfile.email,
+              client_name: `${clientProfile.first_name} ${clientProfile.last_name || ''}`,
+              nanny_name: `${nannyData.first_name} ${nannyData.last_name || ''}`,
+              nanny_phone: nannyProfile?.phone || 'Not provided',
+              nanny_email: nannyProfile?.email || 'Not provided',
+              transaction_id: transactionId,
+              amount: '200.00'
+            };
 
-            if (interestError || !interestData) {
-              console.error('❌ Interest not found:', interestError);
-              console.log('🔍 Query was for full interestId:', interestId);
-              toast({
-                title: "Payment Record Error",
-                description: "Could not find interest record. Please contact support.",
-                variant: "destructive"
-              });
-              return;
-            }
-
-            // Verify client owns this interest
-            if (interestData.client_id !== clientData.id) {
-              console.error('❌ Client mismatch');
-              toast({
-                title: "Access Denied",
-                description: "This payment does not belong to your account.",
-                variant: "destructive"
-              });
-              return;
-            }
-
-            // Check if already paid
-            if (interestData.payment_status === 'completed') {
-              console.log('✅ Interest already paid');
-              toast({
-                title: "Already Paid",
-                description: "This interest has already been paid.",
-              });
-            } else {
-              // Create payment record
-              const { error: paymentError } = await supabase
-                .from('payments')
-                .insert({
-                  client_id: clientData.id,
-                  nanny_id: interestData.nanny_id,
-                  interest_id: interestId,
-                  amount: 200.00,
-                  status: 'completed',
-                  payment_method: 'flutterwave',
-                  transaction_id: transactionId,
-                  created_at: new Date().toISOString()
-                });
-
-              if (paymentError) {
-                console.error('❌ Error creating payment:', paymentError);
-                throw paymentError;
-              }
-              console.log('✅ Payment record created');
-
-              // Update interest
-              const { error: interestUpdateError } = await supabase
-                .from('interests')
-                .update({
-                  payment_status: 'completed',
-                  status: 'approved'
-                })
-                .eq('id', interestId);
-
-              if (interestUpdateError) {
-                console.error('❌ Error updating interest:', interestUpdateError);
-                throw interestUpdateError;
-              }
-              console.log('✅ Interest updated');
-
-              // Get nanny and client info for email
-              const { data: nannyData } = await supabase
-                .from('nannies')
-                .select('first_name, last_name, email, phone')
-                .eq('id', interestData.nanny_id)
-                .single();
-
-              const { data: clientProfile } = await supabase
-                .from('profiles')
-                .select('first_name, last_name, email')
-                .eq('id', user.id)
-                .single();
-
-              // Send email
-              if (nannyData && clientProfile) {
-                console.log('📧 Sending success email...');
-                await sendPaymentSuccessEmail(clientProfile, nannyData);
-              }
-            }
+            await sendPaymentSuccessEmail(paymentEmailData).catch(err => 
+              console.error('Payment success email failed silently:', err)
+            );
           }
 
           toast({
             title: "🎉 Payment Successful!",
-            description: "Contact details have been unlocked. The page will refresh...",
+            description: "Contact details have been unlocked. Refreshing...",
           });
 
-          // Clear URL and refresh
-          setTimeout(() => {
-            window.history.replaceState({}, document.title, '/find-nanny');
-            setRefreshCount(prev => prev + 1);
-            fetchExistingInterests();
-            console.log('✅ Page refresh triggered');
-          }, 2000);
+          // Clear URL and refresh interests
+          window.history.replaceState({}, document.title, '/find-nanny');
+
+          // Refresh interests data
+          await fetchExistingInterests();
+
+          // Force refresh of nannies data
+          setRefreshCount(prev => prev + 1);
+
+          console.log('✅ Payment processed successfully');
 
         } catch (error: any) {
           console.error('❌ Error processing payment redirect:', error);
-          toast({
-            title: "Payment Processing Error",
-            description: error.message || "There was an error processing your payment. Please contact support.",
-            variant: "destructive"
-          });
+          // Don't show error toast for common issues
+          if (!error.message?.includes('already processed') && 
+              !error.message?.includes('already paid')) {
+            toast({
+              title: "Payment Processing Error",
+              description: "Please contact support if the payment was deducted but contact details aren't showing.",
+              variant: "destructive"
+            });
+          }
         } finally {
-          // Reset after delay
+          // Reset after a longer delay
           setTimeout(() => {
-            isProcessingRedirect.current = false;
-          }, 3000);
+            hasProcessedRedirect.current = false;
+          }, 10000);
         }
       }
     };
 
     handlePaymentRedirect();
-  }, [user, userRole, window.location.search]);
+  }, [user, userRole, toast, authLoading]);
 
   useEffect(() => {
     fetchNannies();
@@ -553,6 +661,7 @@ export default function FindNanny() {
     if (!user) return;
 
     try {
+      console.log('🔍 Fetching client interests...');
       // Get client ID from clients table using user_id
       const { data: clientData } = await supabase
         .from('clients')
@@ -561,7 +670,7 @@ export default function FindNanny() {
         .single();
 
       if (clientData) {
-        const { data: interests } = await supabase
+        const { data: interests, error } = await supabase
           .from('interests')
           .select(`
             id,
@@ -582,21 +691,48 @@ export default function FindNanny() {
           `)
           .eq('client_id', clientData.id);
 
+        if (error) {
+          console.error('❌ Error fetching interests:', error);
+          throw error;
+        }
+
+        console.log('📋 Fetched interests with payment_status:', interests);
         setExistingInterests(interests || []);
         
-        // Also check payments table for any completed payments
+        // Also check payments table for verification
         const { data: payments } = await supabase
           .from('payments')
           .select('interest_id, status')
           .eq('client_id', clientData.id)
           .eq('status', 'completed');
           
-        console.log('Completed payments found:', payments);
+        console.log('💳 Completed payments from payments table:', payments);
+        
+        // Double-check: if payment exists but interest payment_status not updated, fix it
+        if (payments && payments.length > 0) {
+          console.log('🔄 Verifying payment_status consistency...');
+          for (const payment of payments) {
+            const interest = interests?.find(i => i.id === payment.interest_id);
+            if (interest && interest.payment_status !== 'completed') {
+              console.warn(`⚠️ Inconsistency found: Payment exists for interest ${payment.interest_id} but payment_status is not 'completed'`);
+              // Auto-fix the inconsistency
+              await supabase
+                .from('interests')
+                .update({ 
+                  payment_status: 'completed',
+                  status: 'approved'
+                })
+                .eq('id', payment.interest_id);
+            }
+          }
+        }
       } else {
+        console.log('No client data found for user');
         setExistingInterests([]);
       }
     } catch (error) {
       console.error('Error fetching existing interests:', error);
+      setExistingInterests([]);
     }
   };
 
@@ -644,52 +780,46 @@ export default function FindNanny() {
     // Check multiple approval indicators
     return interest.status === 'approved' || 
            interest.nanny_response === 'approved' || 
-           interest.admin_approved === true ||
-           interest.payment_status === 'completed';
+           interest.admin_approved === true;
   };
 
+  // Check if payment is completed - using payment_status from interests table
+  const isPaymentCompleted = (interest: Interest | null): boolean => {
+    if (!interest) return false;
+    console.log('🔍 Checking payment status for interest:', {
+      interestId: interest.id,
+      payment_status: interest.payment_status,
+      status: interest.status
+    });
+    return interest.payment_status === 'completed';
+  };
+
+  // UPDATED: Send interest notification emails using new PHP endpoint
   const sendInterestNotificationEmails = async (nanny: Nanny, clientProfile: any, message: string) => {
     try {
       const nannyProfile = getNannyProfileInfo(nanny);
       
-      // Send to nanny
+      // Send to nanny using new PHP endpoint
       const nannyEmailData = {
         to: nannyProfile.email,
         subject: 'New Client Interest - Nanny Placements SA',
-        message: `Hello ${nannyProfile.first_name} ${nannyProfile.last_name || ''},
-
-You have received a new interest request from a client.
-
-Client: ${clientProfile.first_name} ${clientProfile.last_name || ''}
-Client Message: "${message}"
-
-Please log in to your nanny dashboard to approve or decline this request.
-
-Best regards,
-Nanny Placements SA Team`
+        nanny_name: `${nannyProfile.first_name} ${nannyProfile.last_name || ''}`,
+        client_name: `${clientProfile.first_name} ${clientProfile.last_name || ''}`,
+        client_message: message,
+        client_email: clientProfile.email
       };
 
-      await sendEmailViaPHP(nannyEmailData);
+      const result = await sendInterestNotificationEmail(nannyEmailData);
+      
+      // Also send confirmation to client (optional, as PHP might handle it)
+      if (result.success) {
+        console.log('Interest notification sent successfully');
+      } else {
+        console.warn('Interest notification email may have failed:', result.message);
+      }
 
-      // Send to client
-      const clientEmailData = {
-        to: clientProfile.email,
-        subject: 'Interest Submitted - Nanny Placements SA',
-        message: `Hello ${clientProfile.first_name} ${clientProfile.last_name || ''},
+      return result.success;
 
-You have successfully expressed interest in ${nannyProfile.first_name} ${nannyProfile.last_name || ''}.
-
-Your message: "${message}"
-
-Please log in to your account to approve or decline this interest once the nanny responds.
-
-Best regards,
-Nanny Placements SA Team`
-      };
-
-      await sendEmailViaPHP(clientEmailData);
-
-      return true;
     } catch (error) {
       console.error('Error sending interest notification emails:', error);
       return false;
@@ -802,7 +932,7 @@ Nanny Placements SA Team`
 
       if (error) throw error;
 
-      // Send notification emails using PHP endpoint
+      // Send notification emails using NEW PHP endpoint
       await sendInterestNotificationEmails(selectedNanny, clientProfile, interestMessage);
 
       toast({
@@ -825,61 +955,22 @@ Nanny Placements SA Team`
     }
   };
 
-  // Create payment record in payments table
-  const createPaymentRecord = async (clientId: string, nannyId: string, interestId: string, transactionId: string) => {
-    try {
-      const { error } = await supabase
-        .from('payments')
-        .insert({
-          client_id: clientId,
-          nanny_id: nannyId,
-          interest_id: interestId,
-          amount: 200.00,
-          status: 'completed',
-          payment_method: 'flutterwave',
-          transaction_id: transactionId,
-          created_at: new Date().toISOString()
-        });
-
-      if (error) {
-        console.error('Error creating payment record:', error);
-        throw error;
-      }
-          
-      return true;
-    } catch (error) {
-      console.error('Failed to create payment record:', error);
-      throw error;
-    }
-  };
-
-  // Send email after successful payment using PHP endpoint
-  const sendPaymentSuccessEmail = async (clientProfile: any, nannyData: any) => {
+  // UPDATED: Send payment success email using new PHP endpoint
+  const sendPaymentSuccessEmailToClient = async (clientProfile: any, nannyData: any, nannyContactInfo: any, transactionId: string) => {
     try {
       const emailData = {
         to: clientProfile?.email || user?.email || "",
-        subject: 'Nanny Contact Details Unlocked - Nanny Placements SA',
-        message: `Congratulations ${clientProfile?.first_name} ${clientProfile?.last_name || ''}!
-
-You have successfully unlocked ${nannyData.first_name} ${nannyData.last_name || ''}'s contact details.
-
-Nanny Information:
-- Name: ${nannyData.first_name} ${nannyData.last_name || ''}
-- Email: ${nannyData.email}
-- Phone: ${nannyData.phone || 'Will be provided by admin'}
-
-Please contact the nanny directly to schedule an interview. We recommend:
-1. Call or message to introduce yourself
-2. Schedule a meeting time
-3. Discuss your requirements and expectations
-
-Best regards,
-Nanny Placements SA Team`
+        client_name: `${clientProfile?.first_name} ${clientProfile?.last_name || ''}`,
+        nanny_name: `${nannyData.first_name} ${nannyData.last_name || ''}`,
+        nanny_phone: nannyContactInfo?.phone || 'Not provided',
+        nanny_email: nannyContactInfo?.email || 'Not provided',
+        transaction_id: transactionId,
+        amount: '200.00'
       };
 
-      await sendEmailViaPHP(emailData);
-      console.log('Payment success email sent successfully');
-      return true;
+      const result = await sendPaymentSuccessEmail(emailData);
+      console.log('Payment success email result:', result);
+      return result.success;
     } catch (emailError) {
       console.error('Error sending payment success email:', emailError);
       return false;
@@ -1311,9 +1402,16 @@ Nanny Placements SA Team`
         {filteredNannies.map((nanny) => {
           const nannyProfile = getNannyProfileInfo(nanny);
           const interest = getInterestStatusForNanny(nanny.id);
-          const isApproved = interest ? isInterestApprovedByNanny(interest) : false;
-          const isPaid = interest?.payment_status === 'completed';
           const hasInterest = !!interest;
+          const isApproved = interest ? isInterestApprovedByNanny(interest) : false;
+          const isPaid = interest ? isPaymentCompleted(interest) : false;
+          console.log(`Nanny ${nanny.id}:`, { 
+            hasInterest, 
+            isApproved, 
+            isPaid, 
+            payment_status: interest?.payment_status,
+            status: interest?.status
+          });
 
           return (
             <Card key={nanny.id} className="hover:shadow-lg transition-shadow">
@@ -1438,7 +1536,10 @@ Nanny Placements SA Team`
                           disabled={processingPayment === nanny.id}
                         >
                           {processingPayment === nanny.id ? (
-                            'Processing...'
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Processing...
+                            </>
                           ) : (
                             <>
                               <CreditCard className="mr-2 h-4 w-4" />
@@ -1488,7 +1589,7 @@ Nanny Placements SA Team`
             const interest = getInterestStatusForNanny(selectedNanny.id);
             const hasInterest = !!interest;
             const isApproved = interest ? isInterestApprovedByNanny(interest) : false;
-            const isPaid = interest?.payment_status === 'completed';
+            const isPaid = interest ? isPaymentCompleted(interest) : false;
             
             return (
               <div className="space-y-6">
@@ -1602,29 +1703,36 @@ Nanny Placements SA Team`
                   <div className="border-t pt-4">
                     <h4 className="font-semibold mb-2">Express Interest</h4>
                     <div className="space-y-3">
-                      <textarea
-                        className="w-full p-3 border rounded-md resize-none"
-                        rows={3}
-                        value={interestMessage}
-                        onChange={(e) => setInterestMessage(e.target.value)}
-                        placeholder="Tell the nanny about your family and what you're looking for..."
-                      />
-                                          
-                      {!isProfileComplete(user.id) && (
-                        <div className="text-sm text-red-600">
-                          Please complete your profile (name, email, phone, and city are required) to send an interest.{' '}
-                          <a href="/profile" className="underline">Complete Profile</a>
-                        </div>
-                      )}
-                                          
                       {!hasInterest ? (
-                        <Button 
-                          onClick={handleExpressInterest} 
-                          disabled={sendingInterest || !interestMessage.trim() || !isProfileComplete(user.id)}
-                          className="w-full"
-                        >
-                          {sendingInterest ? 'Sending...' : 'Express Interest'}
-                        </Button>
+                        <>
+                          <textarea
+                            className="w-full p-3 border rounded-md resize-none"
+                            rows={3}
+                            value={interestMessage}
+                            onChange={(e) => setInterestMessage(e.target.value)}
+                            placeholder="Tell the nanny about your family and what you're looking for..."
+                          />
+                                          
+                          {!isProfileComplete(user.id) && (
+                            <div className="text-sm text-red-600">
+                              Please complete your profile (name, email, phone, and city are required) to send an interest.{' '}
+                              <a href="/profile" className="underline">Complete Profile</a>
+                            </div>
+                          )}
+                                          
+                          <Button 
+                            onClick={handleExpressInterest} 
+                            disabled={sendingInterest || !interestMessage.trim() || !isProfileComplete(user.id)}
+                            className="w-full"
+                          >
+                            {sendingInterest ? (
+                              <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                Sending...
+                              </>
+                            ) : 'Express Interest'}
+                          </Button>
+                        </>
                       ) : isPaid ? (
                         <div className="p-3 bg-green-100 text-green-800 rounded-md text-center">
                           <CheckCircle className="h-5 w-5 mx-auto mb-1" />
@@ -1639,7 +1747,10 @@ Nanny Placements SA Team`
                           disabled={processingPayment === selectedNanny.id}
                         >
                           {processingPayment === selectedNanny.id ? (
-                            'Processing Payment...'
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Processing Payment...
+                            </>
                           ) : (
                             <>
                               <CreditCard className="mr-2 h-4 w-4" />

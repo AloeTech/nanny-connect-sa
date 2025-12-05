@@ -15,14 +15,22 @@ const ContactForm: React.FC = () => {
     subject: '',
     message: '',
   });
+
   const [submitting, setSubmitting] = useState(false);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    setFormData(prev => ({
+      ...prev,
+      [e.target.name]: e.target.value,
+    }));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
 
     try {
-      const response = await fetch('/send-contact-email.php', {
+      const response = await fetch('https://nannyplacementssouthafrica.co.za/send-contact-email.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -33,7 +41,8 @@ const ContactForm: React.FC = () => {
         }),
       });
 
-      if (!response.ok) throw new Error('Failed to send');
+      const result = await response.json();
+      if (!result.success) throw new Error(result.error || 'Failed to send');
 
       toast({
         title: "Message sent successfully!",
@@ -42,22 +51,17 @@ const ContactForm: React.FC = () => {
 
       setFormData({ name: '', email: '', subject: '', message: '' });
     } catch (error) {
-      console.error('Failed to send email:', error);
+      console.error("Failed to send message:", error);
+
       toast({
         title: "Error",
-        description: "Failed to send message. Please try again or email us directly at admin@nannyplacementssouthafrica.co.za",
+        description:
+          "Failed to send message. Please try again or email us directly at admin@nannyplacementssouthafrica.co.za",
         variant: "destructive",
       });
     } finally {
       setSubmitting(false);
     }
-  };
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    setFormData(prev => ({
-      ...prev,
-      [e.target.name]: e.target.value,
-    }));
   };
 
   return (
@@ -75,8 +79,7 @@ const ContactForm: React.FC = () => {
           <Card className="border-primary/20 shadow-lg">
             <CardHeader>
               <CardTitle className="text-2xl text-primary flex items-center gap-2">
-                <Mail className="w-6 h-6" />
-                Get in Touch
+                <Mail className="w-6 h-6" /> Get in Touch
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -85,7 +88,7 @@ const ContactForm: React.FC = () => {
                 <p className="text-muted-foreground">admin@nannyplacementssouthafrica.co.za</p>
                 <p className="text-sm text-muted-foreground">We typically respond within 24 hours</p>
               </div>
-              
+
               <div>
                 <h3 className="font-semibold text-foreground mb-2">Our Location</h3>
                 <p className="text-muted-foreground">South Africa</p>

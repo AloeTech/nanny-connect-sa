@@ -94,25 +94,29 @@ const getExperienceLabel = (duration: number | null): string => {
   return option.label;
 };
 
-// New function to send email via Afrihost PHP
-const sendEmail = async (to: string, subject: string, message: string) => {
+// NEW: Function to send nanny interest response email via dedicated PHP endpoint
+const sendNannyInterestResponseEmail = async (emailData: any): Promise<{success: boolean, message?: string}> => {
   try {
-    const response = await fetch('https://nannyplacementssouthafrica.co.za/send-contact-email.php', {
+    const response = await fetch('https://nannyplacementssouthafrica.co.za/send-nanny-interest-response.php', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        to, 
-        subject, 
-        message 
-        // Remove 'type' parameter since PHP no longer uses it
-      })
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(emailData),
     });
+
+    const data = await response.json();
     
-    if (!response.ok) throw new Error('Email failed');
-    return await response.json();
+    if (!response.ok) {
+      console.error('Nanny interest response API error:', data);
+      return { success: false, message: data.error };
+    }
+
+    console.log('Nanny interest response email sent successfully:', data);
+    return { success: true, message: 'Interest response email sent successfully' };
   } catch (error) {
-    console.error('Email error:', error);
-    return { success: false };
+    console.error('Nanny interest response email sending error:', error);
+    return { success: false, message: 'Failed to send interest response email' };
   }
 };
 
@@ -302,11 +306,13 @@ export default function NannyDashboard() {
     }
   };
 
+  // UPDATED: Handle interest response with new PHP endpoint
   const handleInterestResponse = async (interestId: string, response: 'approved' | 'declined') => {
     const interest = interests.find(i => i.id === interestId);
     if (!interest || !userProfile) return;
 
     try {
+      // First update the interest in the database
       const { data, error: updateError } = await supabase
         .from('interests')
         .update({
@@ -325,30 +331,31 @@ export default function NannyDashboard() {
         return;
       }
 
+      // Update local state
       setInterests(interests.map(i => i.id === interestId ? data[0] as Interest : i));
 
-      // Send email to client using Afrihost PHP
-      const clientEmailSent = await sendEmail(
-        interest.client_email || '',
-        `Interest Request ${response === 'approved' ? 'Approved' : 'Declined'} - Nanny Placements SA`,
-        `Hi ${interest.client_first_name},
+      // Send email to client using NEW dedicated PHP endpoint
+      const emailData = {
+        to: interest.client_email || '',
+        subject: `Interest Request ${response === 'approved' ? 'Approved' : 'Declined'} - Nanny Placements SA`,
+        client_name: `${interest.client_first_name} ${interest.client_last_name || ''}`,
+        nanny_name: `${userProfile.first_name} ${userProfile.last_name || ''}`,
+        response: response,
+        nanny_response_message: `${userProfile.first_name} has ${response} your request on ${new Date().toLocaleDateString()}.`,
+        date: new Date().toISOString().split('T')[0]
+      };
 
-Your interest request for ${interest.nanny_first_name} ${interest.nanny_last_name || ''} has been ${response} by ${userProfile.first_name}.
-
-${userProfile.first_name}'s response: "${userProfile.first_name} has ${response} your request on ${new Date().toLocaleDateString()}."
-
-Best regards,
-Nanny Placements SA Team`
-      );
+      const emailResult = await sendNannyInterestResponseEmail(emailData);
 
       toast({
         title: 'Success',
-        description: `Request ${response}d${clientEmailSent ? ' and email sent to client' : ''}`,
+        description: `Request ${response}d${emailResult.success ? ' and email sent to client' : ''}`,
       });
     } catch (error: any) {
+      console.error('Error handling interest response:', error);
       toast({
         title: 'Error',
-        description: error.message,
+        description: error.message || 'Failed to process response',
         variant: 'destructive',
       });
     }

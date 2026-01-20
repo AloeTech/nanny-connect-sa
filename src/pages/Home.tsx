@@ -198,7 +198,7 @@ export default function Home() {
               Our Verification Process
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Every nanny goes through our comprehensive verification to ensure your family's safety
+              Every nanny goes through our comprehensive verification to support your family's safety
             </p>
           </div>
           <div className="grid md:grid-cols-3 gap-8 max-w-4xl mx-auto">
@@ -286,7 +286,7 @@ export default function Home() {
         <div className="container mx-auto px-4 text-center">
           <Heart className="h-16 w-16 mx-auto mb-6 opacity-80" />
           <h2 className="text-3xl md:text-4xl font-bold mb-4">
-            Ready to Find Your Perfect Nanny?
+            Ready to Find A Nanny That Matches Your Needs?
           </h2>
           <p className="text-xl mb-8 opacity-90 max-w-2xl mx-auto">
             Join thousands of families who have found trusted childcare through our platform

@@ -120,7 +120,7 @@ export default function Academy() {
           .eq('id', nannyId);
 
         toast({
-          title: "Academy Complete!",
+          title: "Online Academy Complete!",
           description: "Congratulations! You've completed all training videos. An admin will review and approve your completion.",
         });
       } else {

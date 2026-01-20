@@ -1470,7 +1470,7 @@ export default function FindNanny() {
                   <div className="text-right">
                     <div className="flex flex-wrap gap-1 mt-1">
                       {nanny.academy_completed && (
-                        <Badge variant="secondary">Academy Complete</Badge>
+                        <Badge variant="secondary">Online Academy Complete</Badge>
                       )}
                       {nanny.criminal_check_status === 'approved' && (
                         <Badge variant="default">Criminal Check ✓</Badge>
@@ -1620,7 +1620,7 @@ export default function FindNanny() {
                     )}
                     <div className="flex flex-wrap gap-2 mt-3">
                       {selectedNanny.academy_completed && (
-                        <Badge variant="secondary">Academy Complete</Badge>
+                        <Badge variant="secondary">Online Academy Complete</Badge>
                       )}
                       {selectedNanny.criminal_check_status === 'approved' && (
                         <Badge variant="default">Criminal Check ✓</Badge>

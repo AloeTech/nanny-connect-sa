@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Heart, Shield, AlertTriangle, CheckCircle, Loader2, Baby, Home, UserCheck, Eye, EyeOff, Mail, ArrowLeft } from "lucide-react";
+import { Heart, Shield, AlertTriangle, CheckCircle, Loader2, Baby, Home, UserCheck, Eye, EyeOff, Mail, ArrowLeft, CreditCard } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useNavigate } from "react-router-dom";
 import { SOUTH_AFRICAN_CITIES } from '@/data/southAfricanCities';
@@ -24,13 +24,16 @@ export default function Auth() {
   const [showVerificationView, setShowVerificationView] = useState(false);
   const [verificationEmail, setVerificationEmail] = useState('');
 
+  // NEW: Checkbox for terms agreement
+  const [termsAgreed, setTermsAgreed] = useState(false);
+
   // Sign In Form
   const [signInData, setSignInData] = useState({
     email: '',
     password: ''
   });
 
-  // Sign Up Form
+  // Sign Up Form – with bank details for nannies
   const [signUpData, setSignUpData] = useState({
     email: '',
     password: '',
@@ -40,7 +43,10 @@ export default function Auth() {
     userType: '',
     phone: '',
     city: '',
-    town: ''
+    town: '',
+    bankName: '',
+    accountNumber: '',
+    accountHolderName: ''
   });
 
   // Password validation messages
@@ -124,15 +130,38 @@ export default function Auth() {
       case 3:
         return signUpData.city && signUpData.town.trim();
       case 4:
-        return signUpData.userType && 
-               passwordStrength >= 60 && 
-               signUpData.password === signUpData.confirmPassword;
+        let baseValid = !!signUpData.userType && 
+                        passwordStrength >= 60 && 
+                        signUpData.password === signUpData.confirmPassword;
+        
+        // Add bank validation only for nannies
+        if (signUpData.userType === 'nanny') {
+          baseValid = baseValid &&
+                      signUpData.bankName.trim() !== '' &&
+                      signUpData.accountNumber.trim() !== '' &&
+                      signUpData.accountHolderName.trim() !== '';
+        }
+        
+        return baseValid;
       default:
         return false;
     }
   };
 
   const showValidationToast = (step: number) => {
+    // Special handling for nanny bank fields
+    if (step === 4 && signUpData.userType === 'nanny') {
+      if (!signUpData.bankName.trim() || !signUpData.accountNumber.trim() || !signUpData.accountHolderName.trim()) {
+        toast({
+          title: "Bank Details Required",
+          description: "As a nanny, please provide your bank name, account number, and account holder name for job payments.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    // Original messages
     switch (step) {
       case 1:
         toast({
@@ -166,6 +195,15 @@ export default function Auth() {
   };
 
   const nextStep = () => {
+    if (!termsAgreed) {
+      toast({
+        title: "Terms & Privacy Required",
+        description: "You must agree to the Terms of Service and Privacy Policy to continue.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (validateStep(signUpStep)) {
       setSignUpStep(prev => Math.min(prev + 1, 4));
       toast({
@@ -186,7 +224,7 @@ export default function Auth() {
       case 1: return "Basic Information";
       case 2: return "Contact Details";
       case 3: return "Location";
-      case 4: return "Role & Security";
+      case 4: return signUpData.userType === 'nanny' ? "Role, Password & Bank Details" : "Role & Security";
       default: return "";
     }
   };
@@ -194,10 +232,19 @@ export default function Auth() {
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (!termsAgreed) {
+      toast({
+        title: "Terms & Privacy Required",
+        description: "You must agree to the Terms of Service and Privacy Policy to create an account.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (!validateStep(4)) {
       toast({
         title: "Incomplete Form",
-        description: "Please complete all steps before submitting.",
+        description: "Please complete all required fields.",
         variant: "destructive",
       });
       return;
@@ -205,38 +252,71 @@ export default function Auth() {
 
     setIsCreatingAccount(true);
     
-    // Disable all inputs
     const inputs = document.querySelectorAll('input, select, button');
     inputs.forEach(el => {
       el.setAttribute('disabled', 'true');
     });
 
     try {
+      const metadata: any = {
+        first_name: signUpData.firstName,
+        last_name: signUpData.lastName,
+        phone: signUpData.phone,
+        city: signUpData.city,
+        suburb: signUpData.town,
+        user_type: signUpData.userType
+      };
+
+      if (signUpData.userType === 'nanny') {
+        metadata.bank_name = signUpData.bankName.trim();
+        metadata.account_number = signUpData.accountNumber.trim();
+        metadata.account_holder_name = signUpData.accountHolderName.trim();
+      }
+
       const { error } = await signUp(
         signUpData.email,
         signUpData.password,
-        {
-          first_name: signUpData.firstName,
-          last_name: signUpData.lastName,
-          phone: signUpData.phone,
-          city: signUpData.city,
-          suburb: signUpData.town,
-          user_type: signUpData.userType
-        }
+        metadata
       );
 
       if (error) {
-        if (error.message?.includes('already registered')) {
-          toast({
-            title: "Email Already Registered",
-            description: "This email is already associated with an account. Please sign in instead.",
-            variant: "destructive",
-          });
-        } else {
-          throw error;
-        }
-      } else {
-        // Show verification view after successful signup
+  // Detect duplicate from Edge Function response
+  if (
+    error.message?.toLowerCase().includes('already registered') ||
+    error.message?.includes('409') ||
+    error.message?.toLowerCase().includes('duplicate')
+  ) {
+    toast({
+      title: "Email Already Registered",
+      description: (
+        <span>
+          A user with this email already exists. Please{" "}
+          <button
+            className="underline font-medium text-primary hover:text-primary/80"
+            onClick={() => (document.querySelector('[value="signin"]') as HTMLElement)?.click()}
+          >
+            sign in
+          </button>{" "}
+          or contact support at{" "}
+          <a
+            href="mailto:admin@nannyplacementssouthafrica.co.za"
+            className="underline font-medium text-primary hover:text-primary/80"
+          >
+            admin@nannyplacementssouthafrica.co.za
+          </a>
+        </span>
+      ),
+      duration: 10000, // longer visibility
+      variant: "destructive",
+    });
+  } else {
+    toast({
+      title: "Account Creation Failed",
+      description: error.message || "An unexpected error occurred. Please try again or contact support.",
+      variant: "destructive",
+    });
+  }
+} else {
         setVerificationEmail(signUpData.email);
         setShowVerificationView(true);
         toast({
@@ -254,7 +334,6 @@ export default function Auth() {
         variant: "destructive",
       });
     } finally {
-      // Re-enable inputs
       inputs.forEach(el => {
         el.removeAttribute('disabled');
       });
@@ -357,7 +436,7 @@ export default function Auth() {
             <div className="pt-4 border-t border-gray-200">
               <p className="text-xs text-gray-500 text-center">
                 If you're still having trouble, contact us at{' '}
-                <a href="mailto:support@nannyplacements.co.za" className="text-primary hover:underline">
+                <a href="mailto:admin@nannyplacementssouthafrica.co.za" className="text-primary hover:underline">
                   admin@nannyplacementssouthafrica.co.za
                 </a>
               </p>
@@ -558,7 +637,7 @@ export default function Auth() {
                   {signUpStep === 1 && "Let's start with your basic information"}
                   {signUpStep === 2 && "Add your contact details"}
                   {signUpStep === 3 && "Tell us where you're located"}
-                  {signUpStep === 4 && "Choose your role and set password"}
+                  {signUpStep === 4 && (signUpData.userType === 'nanny' ? "Role, Password & Bank Details" : "Role & Security")}
                 </CardDescription>
               </CardHeader>
               
@@ -693,9 +772,9 @@ export default function Auth() {
                     </div>
                   )}
 
-                  {/* Step 4: Role & Password */}
+                  {/* Step 4: Role & Password & Bank (for nannies) */}
                   {signUpStep === 4 && (
-                    <div className="space-y-4 animate-fade-in">
+                    <div className="space-y-6 animate-fade-in">
                       <div className="space-y-2">
                         <Label htmlFor="user-type">
                           I am a... <span className="text-red-600">*</span>
@@ -719,7 +798,7 @@ export default function Auth() {
                             <SelectItem value="nanny">
                               <div className="flex items-center gap-2">
                                 <Baby className="h-4 w-4" />
-                                <span>Nanny looking for work</span>
+                                <span>Nanny / Cleaner looking for work</span>
                               </div>
                             </SelectItem>
                           </SelectContent>
@@ -828,48 +907,142 @@ export default function Auth() {
                           </p>
                         )}
                       </div>
+
+                      {/* BANK DETAILS – ONLY FOR NANNIES */}
+                      {signUpData.userType === 'nanny' && (
+                        <div className="space-y-6 pt-6 border-t border-gray-200">
+                          <div className="flex items-center gap-3">
+                            <CreditCard className="h-6 w-6 text-primary" />
+                            <h4 className="font-semibold text-lg">Payment Details (Required for Nannies)</h4>
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            Please provide accurate bank details so you can receive payments for part-time and once-off cleaning jobs.
+                          </p>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label htmlFor="bank-name">
+                                Bank Name <span className="text-red-600">*</span>
+                              </Label>
+                              <Input
+                                id="bank-name"
+                                placeholder="e.g. FNB, Standard Bank, Absa, Nedbank, Capitec"
+                                value={signUpData.bankName}
+                                onChange={(e) => setSignUpData(prev => ({ ...prev, bankName: e.target.value }))}
+                                required
+                                disabled={isCreatingAccount}
+                              />
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label htmlFor="account-number">
+                                Account Number <span className="text-red-600">*</span>
+                              </Label>
+                              <Input
+                                id="account-number"
+                                placeholder="Your bank account number"
+                                value={signUpData.accountNumber}
+                                onChange={(e) => setSignUpData(prev => ({ ...prev, accountNumber: e.target.value }))}
+                                required
+                                disabled={isCreatingAccount}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label htmlFor="account-holder">
+                              Account Holder Name <span className="text-red-600">*</span>
+                            </Label>
+                            <Input
+                              id="account-holder"
+                              placeholder="Full name as registered with the bank"
+                              value={signUpData.accountHolderName}
+                              onChange={(e) => setSignUpData(prev => ({ ...prev, accountHolderName: e.target.value }))}
+                              required
+                              disabled={isCreatingAccount}
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              Must match the name on your bank account
+                            </p>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 
-                  {/* Navigation Buttons */}
-                  <div className="flex gap-3 mt-6">
-                    {signUpStep > 1 && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={prevStep}
-                        className="flex-1"
+                  {/* Terms & Navigation Buttons – always visible */}
+                  <div className="mt-6 space-y-4">
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        id="terms-agreed"
+                        checked={termsAgreed}
+                        onChange={(e) => setTermsAgreed(e.target.checked)}
+                        className="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
                         disabled={isCreatingAccount}
-                      >
-                        Back
-                      </Button>
-                    )}
-                    
-                    {signUpStep < 4 ? (
-                      <Button
-                        type="button"
-                        onClick={nextStep}
-                        className={signUpStep === 1 ? "flex-1" : "flex-1"}
-                        disabled={isCreatingAccount}
-                      >
-                        Next
-                      </Button>
-                    ) : (
-                      <Button
-                        type="submit"
-                        className="flex-1 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70"
-                        disabled={isCreatingAccount || passwordStrength < 60}
-                      >
-                        {isCreatingAccount ? (
-                          <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Creating Account...
-                          </>
-                        ) : (
-                          'Create Account'
-                        )}
-                      </Button>
-                    )}
+                      />
+                      <label htmlFor="terms-agreed" className="text-sm text-gray-600 cursor-pointer">
+                        I agree to the{' '}
+                        <a 
+                          href="https://nannyplacementssouthafrica.co.za/terms"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline font-medium"
+                        >
+                          Terms of Service
+                        </a>{' '}
+                        and{' '}
+                        <a 
+                          href="https://nannyplacementssouthafrica.co.za/privacy"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline font-medium"
+                        >
+                          Privacy Policy
+                        </a>
+                      </label>
+                    </div>
+
+                    {/* Navigation Buttons */}
+                    <div className="flex gap-3">
+                      {signUpStep > 1 && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={prevStep}
+                          className="flex-1"
+                          disabled={isCreatingAccount}
+                        >
+                          Back
+                        </Button>
+                      )}
+                      
+                      {signUpStep < 4 ? (
+                        <Button
+                          type="button"
+                          onClick={nextStep}
+                          className="flex-1"
+                          disabled={isCreatingAccount || !termsAgreed || !validateStep(signUpStep)}
+                        >
+                          Next
+                        </Button>
+                      ) : (
+                        <Button
+                          type="submit"
+                          className="flex-1 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70"
+                          disabled={isCreatingAccount || !termsAgreed || passwordStrength < 60 || !validateStep(4)}
+                        >
+                          {isCreatingAccount ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Creating Account...
+                            </>
+                          ) : (
+                            'Create Account'
+                          )}
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </form>
               </CardContent>
@@ -878,8 +1051,9 @@ export default function Auth() {
               <div className="mt-4 mx-4 mb-4 p-3 bg-amber-50 border border-amber-200 rounded-md flex items-start gap-2 text-xs text-amber-800">
                 <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
                 <p>
-                  <strong>Important:</strong> The phone number, city, and town/suburb you enter are
-                  <strong> final</strong> and cannot be edited later. Please double-check before creating your account.
+                  <strong>Important:</strong> The phone number, city, and town/suburb 
+                  {signUpData.userType === 'nanny' ? ', and bank details ' : ' '}
+                  you enter are <strong>final</strong> and cannot be edited later. Please double-check before creating your account.
                 </p>
               </div>
             </Card>
@@ -903,28 +1077,17 @@ export default function Auth() {
         </Tabs>
 
         {/* Additional Information */}
-      <div className="mt-6 text-center">
-        <p className="text-sm text-gray-600">
-          By signing up, you agree to our{' '}
-          <a 
-            href="https://nannyplacementssouthafrica.co.za/terms"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-primary hover:underline"
-          >
-            Terms of Service
-          </a>{' '}
-          and{' '}
-          <a 
-            href="https://nannyplacementssouthafrica.co.za/about"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-primary hover:underline"
-          >
-            Privacy Policy
-          </a>
-        </p>
-      </div>
+        <div className="mt-6 text-center">
+          <p className="text-sm text-gray-600">
+            Already have an account?{' '}
+            <button 
+              onClick={() => (document.querySelector('[value="signin"]') as HTMLElement)?.click()}
+              className="text-primary hover:underline font-medium"
+            >
+              Sign in
+            </button>
+          </p>
+        </div>
       </div>
     </div>
   );

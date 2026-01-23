@@ -198,7 +198,7 @@ export default function Home() {
               Our Verification Process
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Every nanny goes through our comprehensive verification to support your family's safety
+              Every nanny and cleaner goes through our comprehensive verification to support your family's safety
             </p>
           </div>
           <div className="grid md:grid-cols-3 gap-8 max-w-4xl mx-auto">

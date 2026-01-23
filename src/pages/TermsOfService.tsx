@@ -43,14 +43,14 @@ export default function TermsOfService() {
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-muted-foreground leading-relaxed">
-                Nanny Placements SA is a platform that connects families with qualified nannies. Our services include:
+                Nanny Placements SA is a platform that connects families with nannies and cleaners. Our services include:
               </p>
               <ul className="list-disc pl-6 text-muted-foreground space-y-2">
                 <li>Nanny profile verification and background checks</li>
                 <li>Foundational training through our Nanny Academy</li>
                 <li>Matching services between families and nannies</li>
-                <li>Payment processing for placement fees</li>
-                <li>Ongoing support and mediation services</li>
+                <li>Payment processing for matching fees</li>
+                <li>Ongoing online support in relations to the platform</li>
               </ul>
             </CardContent>
           </Card>
@@ -72,10 +72,10 @@ export default function TermsOfService() {
                 </ul>
               </div>
               <div>
-                <h4 className="font-semibold text-foreground mb-3">For Nannies</h4>
+                <h4 className="font-semibold text-foreground mb-3">For Workers</h4>
                 <ul className="list-disc pl-6 text-muted-foreground space-y-2">
                   <li>Provide accurate personal and professional information</li>
-                  <li>Complete all required background checks and training</li>
+                  <li>Complete all required background checks and online or in person training</li>
                   <li>Maintain professional conduct at all times</li>
                   <li>Honor agreements made with families</li>
                   <li>Keep children's safety as the top priority</li>
@@ -92,16 +92,17 @@ export default function TermsOfService() {
             <CardContent className="space-y-4">
               <div className="bg-primary/5 p-4 rounded-lg">
                 <Badge variant="secondary" className="mb-3 bg-primary text-primary-foreground">
-                  Placement Fee
+                  Matching Fee
                 </Badge>
                 <p className="text-muted-foreground">
-                  Our placement fee is a maximum of R200.00, paid once upon successful matching between a family and nanny.
+                  Our matching fee is a maximum of R200.00, paid once upon successful matching between a family and nanny.
                 </p>
               </div>
               <ul className="list-disc pl-6 text-muted-foreground space-y-2">
-                <li>Payment is due upon acceptance of a nanny placement</li>
+                <li>Nanny Placements SA reserves the right to change its pricing for matching workers with clients</li>
+                <li>Payment is due upon selecting a worker for matching/interview</li>
                 <li>Fees are non-refundable except in cases of platform error</li>
-                <li>All payments are processed securely through our payment partners</li>
+                <li>All payments are processed securely through our payment partner</li>
                 <li>Additional services may incur separate charges</li>
               </ul>
             </CardContent>
@@ -138,15 +139,15 @@ export default function TermsOfService() {
               <div className="bg-amber-100 p-4 rounded-lg border border-amber-200">
                 <p className="text-amber-800 font-medium mb-2">Important Notice:</p>
                 <p className="text-amber-700 text-sm">
-                  Nanny Placements SA is a placement service only. We are not liable for the actions, 
-                  conduct, or performance of nannies or families using our platform.
+                  Nanny Placements SA is a matching service only. We are not liable for the actions, 
+                  conduct, or performance of nannies, cleaners or families using our platform.
                 </p>
               </div>
               <ul className="list-disc pl-6 text-amber-700 space-y-2 text-sm">
                 <li>Users are responsible for conducting their own due diligence</li>
                 <li>We recommend independent verification of all information</li>
                 <li>Employment contracts are between families and nannies directly</li>
-                <li>Platform liability is limited to the placement fee paid</li>
+                <li>Platform liability is limited to the matching fee paid</li>
                 
               </ul>
             </CardContent>

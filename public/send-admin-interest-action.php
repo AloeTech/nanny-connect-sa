@@ -77,7 +77,7 @@ if ($recipientType === 'client') {
         $message .= "2. Wait for the nanny to respond to your request\n";
         $message .= "3. If the nanny approves, you can proceed with payment\n\n";
     } else {
-        $message .= "Don't be discouraged! There are many other qualified nannies available.\n";
+        $message .= "Don't be discouraged! There are many other nannies available.\n";
         $message .= "Feel free to browse our platform and express interest in other nannies.\n\n";
     }
 } else if ($recipientType === 'nanny') {

@@ -9,7 +9,21 @@ interface AuthContextType {
   session: Session | null;
   userRole: string | null;
   loading: boolean;
-  signUp: (email: string, password: string, metadata?: any) => Promise<{ error: any }>;
+  signUp: (
+    email: string,
+    password: string,
+    metadata?: {
+      first_name?: string;
+      last_name?: string;
+      phone?: string;
+      city?: string;
+      suburb?: string;
+      user_type?: string;
+      bank_name?: string;           // NEW
+      account_number?: string;      // NEW
+      account_holder_name?: string; // NEW
+    }
+  ) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
 }
@@ -83,24 +97,50 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
-  // SIGNUP → CALL EDGE FUNCTION + TRIGGER CONFIRMATION EMAIL
-  const signUp = async (email: string, password: string, metadata?: any) => {
+  // ───────────────────────────────────────────────
+  // SIGNUP – now accepts and forwards bank details
+  // ───────────────────────────────────────────────
+  const signUp = async (
+    email: string,
+    password: string,
+    metadata?: {
+      first_name?: string;
+      last_name?: string;
+      phone?: string;
+      city?: string;
+      suburb?: string;
+      user_type?: string;
+      bank_name?: string;
+      account_number?: string;
+      account_holder_name?: string;
+    }
+  ) => {
     try {
       cleanupAuthState();
 
+      // Prepare payload for Edge Function
+      const payload: any = {
+        email,
+        password,
+        first_name: metadata?.first_name,
+        last_name: metadata?.last_name,
+        phone: metadata?.phone,
+        city: metadata?.city,
+        suburb: metadata?.suburb,
+        user_type: metadata?.user_type,
+        send_confirmation: true,
+        redirect_to: `${window.location.origin}/`
+      };
+
+      // Only include bank details if user is a nanny
+      if (metadata?.user_type === 'nanny') {
+        payload.bank_name = metadata.bank_name?.trim();
+        payload.account_number = metadata.account_number?.trim();
+        payload.account_holder_name = metadata.account_holder_name?.trim();
+      }
+
       const { data, error } = await supabase.functions.invoke('signup-with-role', {
-        body: {
-          email,
-          password,
-          first_name: metadata?.first_name,
-          last_name: metadata?.last_name,
-          phone: metadata?.phone,
-          city: metadata?.city,
-          suburb: metadata?.suburb,
-          user_type: metadata?.user_type,
-          send_confirmation: true,           // TRIGGER CONFIRMATION EMAIL
-          redirect_to: `${window.location.origin}/`
-        }
+        body: payload
       });
 
       if (error || !data?.success) {
@@ -113,7 +153,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { error: new Error(message) };
       }
 
-      // SHOW "CHECK EMAIL" TOAST
+      // Success toast
       toast({
         title: "Check Your Email",
         description: "Please confirm your email to complete your profile.",

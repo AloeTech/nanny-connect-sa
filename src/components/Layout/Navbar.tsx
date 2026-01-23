@@ -1,5 +1,5 @@
+import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/hooks/useAuth";
 import { Heart, LogOut, Menu, Shield, User, Users, Video } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import {
@@ -10,13 +10,18 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function Navbar() {
   const { user, userRole, signOut } = useAuth();
   const navigate = useNavigate();
 
+  // NEW: Control mobile menu open/close state
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   const handleSignOut = async () => {
     await signOut();
+    setMobileMenuOpen(false); // also close menu on sign out
   };
 
   const getDashboardRoute = () => {
@@ -32,17 +37,26 @@ export default function Navbar() {
     }
   };
 
-  const NavLinks = () => (
+  const NavLinks = ({ mobile = false }) => (
     <>
       {!user && (
         <>
-          <Link to="/find-nanny">
+          <Link 
+            to="/find-nanny" 
+            onClick={() => mobile && setMobileMenuOpen(false)}
+          >
             <Button variant="ghost">Find a Nanny</Button>
           </Link>
-          <Link to="/register-nanny">
+          <Link 
+            to="/register-nanny" 
+            onClick={() => mobile && setMobileMenuOpen(false)}
+          >
             <Button variant="ghost">Become a Nanny</Button>
           </Link>
-          <Link to="/about">
+          <Link 
+            to="/about" 
+            onClick={() => mobile && setMobileMenuOpen(false)}
+          >
             <Button variant="ghost">About</Button>
           </Link>
         </>
@@ -50,11 +64,18 @@ export default function Navbar() {
       
       {user && userRole === 'nanny' && (
         <>
-          <Link to="/nanny-dashboard">
+          <Link 
+            to="/nanny-dashboard" 
+            onClick={() => mobile && setMobileMenuOpen(false)}
+          >
             <Button variant="ghost">Dashboard</Button>
           </Link>
-          <Link to="/academy">
-            <Button variant="ghost" className="gap-2">
+          <Link 
+            to="/academy" 
+            onClick={() => mobile && setMobileMenuOpen(false)}
+            className="gap-2"
+          >
+            <Button variant="ghost">
               <Video className="h-4 w-4" />
               Academy
             </Button>
@@ -64,11 +85,18 @@ export default function Navbar() {
       
       {user && userRole === 'client' && (
         <>
-          <Link to="/client-dashboard">
+          <Link 
+            to="/client-dashboard" 
+            onClick={() => mobile && setMobileMenuOpen(false)}
+          >
             <Button variant="ghost">Dashboard</Button>
           </Link>
-          <Link to="/find-nanny">
-            <Button variant="ghost" className="gap-2">
+          <Link 
+            to="/find-nanny" 
+            onClick={() => mobile && setMobileMenuOpen(false)}
+            className="gap-2"
+          >
+            <Button variant="ghost">
               <Users className="h-4 w-4" />
               Find Nannies
             </Button>
@@ -78,20 +106,32 @@ export default function Navbar() {
       
       {user && userRole === 'admin' && (
         <>
-          <Link to="/admin">
-            <Button variant="ghost" className="gap-2">
+          <Link 
+            to="/admin" 
+            onClick={() => mobile && setMobileMenuOpen(false)}
+            className="gap-2"
+          >
+            <Button variant="ghost">
               <Shield className="h-4 w-4" />
               Admin Panel
             </Button>
           </Link>
-          <Link to="/admin/roles">
-            <Button variant="ghost" className="gap-2">
+          <Link 
+            to="/admin/roles" 
+            onClick={() => mobile && setMobileMenuOpen(false)}
+            className="gap-2"
+          >
+            <Button variant="ghost">
               <Users className="h-4 w-4" />
               Assign Roles
             </Button>
           </Link>
-          <Link to="/academy">
-            <Button variant="ghost" className="gap-2">
+          <Link 
+            to="/academy" 
+            onClick={() => mobile && setMobileMenuOpen(false)}
+            className="gap-2"
+          >
+            <Button variant="ghost">
               <Video className="h-4 w-4" />
               Academy
             </Button>
@@ -99,17 +139,23 @@ export default function Navbar() {
         </>
       )}
       
-       {/* Common links for authenticated users only */}
-       {user && (
-         <>
-           <Link to="/about">
-             <Button variant="ghost">About</Button>
-           </Link>
-           <Link to="/terms">
-             <Button variant="ghost">Terms</Button>
-           </Link>
-         </>
-       )}
+      {/* Common links for authenticated users only */}
+      {user && (
+        <>
+          <Link 
+            to="/about" 
+            onClick={() => mobile && setMobileMenuOpen(false)}
+          >
+            <Button variant="ghost">About</Button>
+          </Link>
+          <Link 
+            to="/terms" 
+            onClick={() => mobile && setMobileMenuOpen(false)}
+          >
+            <Button variant="ghost">Terms</Button>
+          </Link>
+        </>
+      )}
     </>
   );
 
@@ -170,9 +216,9 @@ export default function Navbar() {
             )}
           </div>
 
-          {/* Mobile Navigation */}
+          {/* Mobile Navigation – FIXED */}
           <div className="md:hidden">
-            <Sheet>
+            <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
               <SheetTrigger asChild>
                 <Button variant="ghost" size="icon">
                   <Menu className="h-6 w-6" />
@@ -180,37 +226,37 @@ export default function Navbar() {
               </SheetTrigger>
               <SheetContent side="right" className="w-80">
                 <div className="flex flex-col gap-4 mt-8">
-                  <NavLinks />
+                  <NavLinks mobile={true} />
                   
                   {!user ? (
                     <div className="flex flex-col gap-2 mt-4">
-                      <Link to="/auth">
+                      <Link to="/auth" onClick={() => setMobileMenuOpen(false)}>
                         <Button variant="outline" className="w-full">
                           Sign In
                         </Button>
                       </Link>
-                      <Link to="/auth">
+                      <Link to="/auth" onClick={() => setMobileMenuOpen(false)}>
                         <Button className="w-full">Get Started</Button>
                       </Link>
                     </div>
                   ) : (
                     <div className="flex flex-col gap-2 mt-4">
-                      <Link to={getDashboardRoute()}>
+                      <Link to={getDashboardRoute()} onClick={() => setMobileMenuOpen(false)}>
                         <Button variant="outline" className="w-full">
                           Dashboard
                         </Button>
                       </Link>
-                      <Link to="/profile">
+                      <Link to="/profile" onClick={() => setMobileMenuOpen(false)}>
                         <Button variant="outline" className="w-full">
                           Profile Settings
                         </Button>
                       </Link>
-                      <Link to="/about">
+                      <Link to="/about" onClick={() => setMobileMenuOpen(false)}>
                         <Button variant="outline" className="w-full">
                           About
                         </Button>
                       </Link>
-                      <Link to="/terms">
+                      <Link to="/terms" onClick={() => setMobileMenuOpen(false)}>
                         <Button variant="outline" className="w-full">
                           Terms of Service
                         </Button>

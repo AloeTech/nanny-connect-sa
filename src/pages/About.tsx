@@ -13,7 +13,7 @@ export default function About() {
             About Nanny Placements SA
           </h1>
           <p className="text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
-            Connecting South African families with trusted, qualified nannies through our comprehensive 
+            Connecting South African families with trusted, nannies through our comprehensive 
             vetting process and foundational training programs.
           </p>
         </div>
@@ -26,9 +26,9 @@ export default function About() {
             </CardHeader>
             <CardContent>
               <p className="text-muted-foreground leading-relaxed">
-                To empower South African families with access to exceptional childcare, providing a seamless 
+                To empower South African families with access nannies and cleaners providing a seamless 
                 platform that streamlines vetting, offers foundational training, and fosters meaningful 
-                connections between caregivers and families.
+                connections between workers and families.
               </p>
             </CardContent>
           </Card>
@@ -39,8 +39,8 @@ export default function About() {
             </CardHeader>
             <CardContent>
               <p className="text-muted-foreground leading-relaxed">
-                To become South Africa's most trusted nanny placement platform, ensuring every child 
-                receives quality care.
+                To become South Africa's most trusted nanny and cleaner placement platform, ensuring every home
+                receives a good match for their family.
               </p>
             </CardContent>
           </Card>
@@ -50,7 +50,7 @@ export default function About() {
         <div className="mb-16">
           <div className="text-center mb-12">
             <h2 className="text-3xl font-bold text-foreground mb-4">What Sets Us Apart</h2>
-            <p className="text-lg text-muted-foreground">Our comprehensive approach to nanny placement</p>
+            <p className="text-lg text-muted-foreground">Our comprehensive approach to nanny matching</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -91,7 +91,7 @@ export default function About() {
               </CardHeader>
               <CardContent>
                 <p className="text-muted-foreground">
-                  Our Nanny Academy equips caregivers with essential tools and skills for childcare and homecare
+                  Our online academy provides basic training to all nannies on the plartform
                 </p>
               </CardContent>
             </Card>
@@ -125,7 +125,7 @@ export default function About() {
             <div className="max-w-2xl mx-auto">
               <h3 className="text-2xl font-semibold text-foreground mb-4">Most Competitive Rates</h3>
               <p className="text-lg text-muted-foreground mb-6">
-                We offer one of the most competitive nanny placement services in South Africa, with a maximum 
+                We offer one of the most competitive nanny matching services in South Africa, with a maximum 
                 once-off matching fee of R200.00.
               </p>
               <Badge variant="secondary" className="text-lg px-6 py-2 bg-primary text-primary-foreground">
@@ -211,7 +211,7 @@ export default function About() {
                   <CheckCircle className="w-12 h-12 text-primary mb-4" />
                   <h4 className="font-semibold text-foreground mb-2">Ongoing Support</h4>
                   <p className="text-muted-foreground text-center">
-                    Continuous support throughout the placement process and beyond
+                    Continuous support throughout the matching process and beyond
                   </p>
                 </div>
               </div>

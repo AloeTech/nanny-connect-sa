@@ -371,7 +371,7 @@ export default function ClientDashboard() {
                               {nannyFirstName} has declined your request
                             </p>
                             <p className="text-sm text-muted-foreground mt-2">
-                              Don't be discouraged! There are many other qualified nannies available.
+                              Don't be discouraged! There are many other nannies available.
                             </p>
                             <Link to="/find-nanny">
                               <Button variant="outline" className="mt-3">
@@ -578,6 +578,7 @@ export default function ClientDashboard() {
                 <div>
                   <p className="text-sm font-medium text-blue-800">Interview Tips</p>
                   <ul className="text-sm text-blue-700 space-y-1 mt-1">
+                    <li>• Meet in a public area, not in your home</li>
                     <li>• Prepare questions in advance</li>
                     <li>• Discuss expectations clearly</li>
                     <li>• Verify references</li>

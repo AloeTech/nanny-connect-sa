@@ -3,15 +3,25 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
-import { Users, UserCheck, Shield } from 'lucide-react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Users, UserCheck, Shield, Search, Mail, Calendar, Filter, Loader2 } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 interface User {
   id: string;
   email: string;
   created_at: string;
+  first_name?: string;
+  last_name?: string;
   user_roles?: Array<{ role: string }>;
 }
 
@@ -19,14 +29,21 @@ export default function AdminRoleAssignment() {
   const { userRole } = useAuth();
   const { toast } = useToast();
   const [users, setUsers] = useState<User[]>([]);
+  const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [assigningRole, setAssigningRole] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [roleFilter, setRoleFilter] = useState<string>('all');
 
   useEffect(() => {
     if (userRole === 'admin') {
       fetchUsers();
     }
   }, [userRole]);
+
+  useEffect(() => {
+    filterUsers();
+  }, [searchTerm, roleFilter, users]);
 
   const fetchUsers = async () => {
     try {
@@ -37,13 +54,17 @@ export default function AdminRoleAssignment() {
           id,
           email,
           created_at,
+          first_name,
+          last_name,
           user_roles (
             role
           )
-        `);
+        `)
+        .order('created_at', { ascending: false });
 
       if (profiles) {
         setUsers(profiles);
+        setFilteredUsers(profiles);
       }
     } catch (error) {
       console.error('Error fetching users:', error);
@@ -57,7 +78,31 @@ export default function AdminRoleAssignment() {
     }
   };
 
-  const assignRole = async (userId: string, role: 'nanny' | 'client') => {
+  const filterUsers = () => {
+    let filtered = [...users];
+
+    // Apply search filter
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      filtered = filtered.filter(user =>
+        user.email.toLowerCase().includes(term) ||
+        user.first_name?.toLowerCase().includes(term) ||
+        user.last_name?.toLowerCase().includes(term)
+      );
+    }
+
+    // Apply role filter
+    if (roleFilter !== 'all') {
+      filtered = filtered.filter(user => {
+        const userRole = user.user_roles?.[0]?.role;
+        return roleFilter === 'no-role' ? !userRole : userRole === roleFilter;
+      });
+    }
+
+    setFilteredUsers(filtered);
+  };
+
+  const assignRole = async (userId: string, role: 'nanny' | 'client' | 'admin') => {
     setAssigningRole(userId);
     
     try {
@@ -72,7 +117,7 @@ export default function AdminRoleAssignment() {
       await supabase.from('clients').delete().eq('user_id', userId);
 
       // Call the database function to assign new role
-      const { data, error } = await supabase.rpc('assign_user_role', {
+      const { error } = await supabase.rpc('assign_user_role', {
         _user_id: userId,
         _role: role
       });
@@ -94,10 +139,11 @@ export default function AdminRoleAssignment() {
             user_id: userId
           }]);
       }
+      // Admin role doesn't need additional profile creation
 
       toast({
         title: "Success",
-        description: `${role} role assigned successfully`,
+        description: `${role.charAt(0).toUpperCase() + role.slice(1)} role assigned successfully`,
       });
 
       // Refresh the users list
@@ -113,6 +159,28 @@ export default function AdminRoleAssignment() {
     } finally {
       setAssigningRole(null);
     }
+  };
+
+  const getRoleColor = (role: string | null) => {
+    switch (role) {
+      case 'admin': return 'bg-purple-100 text-purple-800 border-purple-200';
+      case 'nanny': return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'client': return 'bg-green-100 text-green-800 border-green-200';
+      default: return 'bg-gray-100 text-gray-800 border-gray-200';
+    }
+  };
+
+  const getRoleDisplayName = (role: string | null) => {
+    if (!role) return 'No Role';
+    return role.charAt(0).toUpperCase() + role.slice(1);
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-ZA', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric'
+    });
   };
 
   if (userRole !== 'admin') {
@@ -145,80 +213,208 @@ export default function AdminRoleAssignment() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold flex items-center gap-2">
           <Users className="h-8 w-8" />
-          User Role Assignment
+          User Role Management
         </h1>
-        <p className="text-muted-foreground">Assign roles to registered users</p>
+        <p className="text-muted-foreground">Manage user roles and permissions</p>
       </div>
 
-      <div className="grid gap-4">
-        {users.map((user) => {
-          const hasRole = user.user_roles && user.user_roles.length > 0;
-          const currentRole = hasRole ? user.user_roles[0].role : null;
+      <Card className="mb-6">
+        <CardContent className="p-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div className="space-y-2">
+              <h3 className="text-lg font-semibold">Total Users</h3>
+              <p className="text-3xl font-bold">{users.length}</p>
+            </div>
+            <div className="space-y-2">
+              <h3 className="text-lg font-semibold">Filtered Users</h3>
+              <p className="text-3xl font-bold">{filteredUsers.length}</p>
+            </div>
+            <div className="space-y-2">
+              <h3 className="text-lg font-semibold">Admins</h3>
+              <p className="text-3xl font-bold">
+                {users.filter(u => u.user_roles?.[0]?.role === 'admin').length}
+              </p>
+            </div>
+          </div>
 
-          return (
-            <Card key={user.id}>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="text-lg">{user.email}</CardTitle>
-                    <CardDescription>
-                      Registered: {new Date(user.created_at).toLocaleDateString()}
-                    </CardDescription>
-                  </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div className="relative">
+              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by name or email..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <div>
+              <Select value={roleFilter} onValueChange={setRoleFilter}>
+                <SelectTrigger>
                   <div className="flex items-center gap-2">
-                    {hasRole ? (
-                      <Badge variant="default" className="capitalize">
-                        <UserCheck className="h-3 w-3 mr-1" />
-                        {currentRole}
-                      </Badge>
-                    ) : (
-                      <Badge variant="destructive">
-                        No Role
-                      </Badge>
-                    )}
+                    <Filter className="h-4 w-4" />
+                    <SelectValue placeholder="Filter by role" />
                   </div>
-                </div>
-              </CardHeader>
-              
-              <CardContent>
-                <div className="flex items-center gap-4">
-                  <p className="text-sm text-muted-foreground">
-                    {hasRole ? 'Change role:' : 'Assign role:'}
-                  </p>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      onClick={() => assignRole(user.id, 'nanny')}
-                      disabled={assigningRole === user.id || currentRole === 'nanny'}
-                      variant={currentRole === 'nanny' ? 'default' : 'outline'}
-                    >
-                      {assigningRole === user.id ? 'Assigning...' : 'Nanny'}
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={() => assignRole(user.id, 'client')}
-                      disabled={assigningRole === user.id || currentRole === 'client'}
-                      variant={currentRole === 'client' ? 'default' : 'outline'}
-                    >
-                      {assigningRole === user.id ? 'Assigning...' : 'Client'}
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Roles</SelectItem>
+                  <SelectItem value="admin">Admins</SelectItem>
+                  <SelectItem value="nanny">Nannies</SelectItem>
+                  <SelectItem value="client">Clients</SelectItem>
+                  <SelectItem value="no-role">No Role</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
-      {users.length === 0 && (
-        <Card>
-          <CardContent className="text-center py-12">
-            <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No Users Found</h3>
-            <p className="text-muted-foreground">No users are registered yet.</p>
-          </CardContent>
-        </Card>
-      )}
+      <Card>
+        <CardHeader>
+          <CardTitle>Users ({filteredUsers.length})</CardTitle>
+          <CardDescription>
+            Click on role buttons to assign or change user roles
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {filteredUsers.length === 0 ? (
+            <div className="text-center py-12">
+              <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-lg font-semibold mb-2">No Users Found</h3>
+              <p className="text-muted-foreground">
+                {searchTerm || roleFilter !== 'all' 
+                  ? 'Try adjusting your search or filter' 
+                  : 'No users are registered yet.'}
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>User Information</TableHead>
+                    <TableHead>Registration Date</TableHead>
+                    <TableHead>Current Role</TableHead>
+                    <TableHead>Assign Role</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredUsers.map((user) => {
+                    const currentRole = user.user_roles?.[0]?.role || null;
+                    const fullName = user.first_name || user.last_name 
+                      ? `${user.first_name || ''} ${user.last_name || ''}`.trim()
+                      : 'No name provided';
+
+                    return (
+                      <TableRow key={user.id}>
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <div className="font-medium">{user.email}</div>
+                            <div className="text-sm text-muted-foreground">{fullName}</div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Calendar className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-sm">{formatDate(user.created_at)}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge 
+                            variant="outline" 
+                            className={`${getRoleColor(currentRole)} font-medium`}
+                          >
+                            <UserCheck className="h-3 w-3 mr-1" />
+                            {getRoleDisplayName(currentRole)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              onClick={() => assignRole(user.id, 'nanny')}
+                              disabled={assigningRole === user.id}
+                              variant={currentRole === 'nanny' ? 'default' : 'outline'}
+                              className={currentRole === 'nanny' ? 'bg-blue-600 hover:bg-blue-700' : ''}
+                            >
+                              {assigningRole === user.id ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                'Nanny'
+                              )}
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={() => assignRole(user.id, 'client')}
+                              disabled={assigningRole === user.id}
+                              variant={currentRole === 'client' ? 'default' : 'outline'}
+                              className={currentRole === 'client' ? 'bg-green-600 hover:bg-green-700' : ''}
+                            >
+                              {assigningRole === user.id ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                'Client'
+                              )}
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={() => assignRole(user.id, 'admin')}
+                              disabled={assigningRole === user.id}
+                              variant={currentRole === 'admin' ? 'default' : 'outline'}
+                              className={currentRole === 'admin' ? 'bg-purple-600 hover:bg-purple-700' : 'text-purple-600 border-purple-200 hover:bg-purple-50'}
+                            >
+                              {assigningRole === user.id ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                'Admin'
+                              )}
+                            </Button>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              const subject = `Regarding your account on Nanny Placements SA`;
+                              window.location.href = `mailto:${user.email}?subject=${encodeURIComponent(subject)}`;
+                            }}
+                            className="text-muted-foreground hover:text-foreground"
+                          >
+                            <Mail className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="mt-6 text-sm text-muted-foreground">
+        <div className="flex items-center gap-4 mb-4">
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-purple-600"></div>
+            <span>Admin</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-blue-600"></div>
+            <span>Nanny</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-green-600"></div>
+            <span>Client</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-gray-600"></div>
+            <span>No Role</span>
+          </div>
+        </div>
+        <p className="italic">Note: Assigning a new role will remove any existing role and associated profile data.</p>
+      </div>
     </div>
   );
 }

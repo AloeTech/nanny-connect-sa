@@ -2,7 +2,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle, Heart, Shield, Star, Users, Video, AlertCircle } from "lucide-react";
+import { CheckCircle, Heart, Shield, Star, Users, Video, AlertCircle, Sparkles, Home as HomeIcon } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useEffect, useState } from "react";
@@ -14,6 +14,12 @@ export default function Home() {
   const { toast } = useToast();
   const [profileIncomplete, setProfileIncomplete] = useState(false);
   const [loadingProfile, setLoadingProfile] = useState(true);
+  const [stats, setStats] = useState({
+    nannies: 0,
+    cleaners: 0,
+    clients: 0,
+    placements: 0
+  });
 
   // Check if logged-in user has incomplete profile
   useEffect(() => {
@@ -57,26 +63,90 @@ export default function Home() {
     checkProfile();
   }, [user, userRole]);
 
+  // Fetch stats
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        // Get approved nannies count
+        const { count: nanniesCount } = await supabase
+          .from('nannies')
+          .select('*', { count: 'exact', head: true })
+          .eq('profile_approved', true)
+          .eq('experience_type', 'nanny');
+
+        // Get approved cleaners count
+        const { count: cleanersCount } = await supabase
+          .from('nannies')
+          .select('*', { count: 'exact', head: true })
+          .eq('profile_approved', true)
+          .in('experience_type', ['cleaning', 'both']);
+
+        // Get clients count
+        const { count: clientsCount } = await supabase
+          .from('clients')
+          .select('*', { count: 'exact', head: true });
+
+        // Get successful placements count (from payments)
+        const { count: placementsCount } = await supabase
+          .from('payments')
+          .select('*', { count: 'exact', head: true })
+          .eq('status', 'completed');
+
+        setStats({
+          nannies: nanniesCount || 0,
+          cleaners: cleanersCount || 0,
+          clients: clientsCount || 0,
+          placements: placementsCount || 0
+        });
+      } catch (error) {
+        console.error("Error fetching stats:", error);
+      }
+    };
+
+    fetchStats();
+  }, []);
+
   const features = [
     {
       icon: Shield,
-      title: "Verified Nanny Profiles",
+      title: "Verified Profiles",
       description: "We verify that each profile is uploaded with the necessary verification documents such as ID's, Criminal Record Check and Proof Of Residence"
     },
     {
       icon: Video,
-      title: "Nanny Academy",
-      description: "Foundational training through our Virtual Nanny Academy to ensure good quality childcare"
+      title: "Professional Training",
+      description: "Foundational training through our Virtual Academy to ensure good quality childcare and cleaning services"
     },
     {
       icon: Users,
       title: "More Control",
-      description: "You get to shortlist your own Nannies based on your preferences. We make it easy for you"
+      description: "You get to shortlist your own Nannies and Cleaners based on your preferences. We make it easy for you"
     },
     {
       icon: Star,
       title: "Quality Process",
-      description: "Only approved profiles who have completed our Virtual Nanny Training and submitted verification checks"
+      description: "Only approved profiles who have completed our Virtual Training and submitted verification checks"
+    }
+  ];
+
+  const cleaningFeatures = [
+    {
+      title: "Once-off Cleaning",
+      description: "R400 - Our team arranges and manages the cleaning service for you",
+      fee: "R400",
+      color: "bg-blue-50"
+    },
+    {
+      title: "Part-time Cleaning",
+      description: "R200 sourcing fee - You arrange directly with the cleaner for regular part-time services",
+      fee: "R200",
+      color: "bg-green-50"
+    },
+    {
+      title: "Full-time Cleaning",
+      description: "R200 sourcing fee - You arrange directly with the cleaner for full-time employment",
+      fee: "R200",
+      color: "bg-purple-50"
     }
   ];
 
@@ -110,14 +180,15 @@ export default function Home() {
         </div>
       )}
 
+
       {/* Hero Section */}
       <section className="hero-gradient text-primary-foreground py-20">
         <div className="container mx-auto px-4 text-center">
           <h1 className="text-4xl md:text-6xl font-bold mb-6">
-            Find Trusted Nannies in South Africa
+            Find Trusted Nannies & Cleaners in South Africa
           </h1>
           <p className="text-xl md:text-2xl mb-8 max-w-3xl mx-auto opacity-90">
-            Connect families with verified, trained, and background-checked nannies across South Africa
+            Connect families with verified, trained, and background-checked nannies and professional cleaners across South Africa
           </p>
          
           {!user ? (
@@ -127,20 +198,32 @@ export default function Home() {
                   Find a Nanny
                 </Button>
               </Link>
-              <Link to="/register-nanny">
+              <Link to="/find-cleaner">
                 <Button size="lg" variant="outline" className="text-lg px-8 bg-white/10 border-white/20 text-white hover:bg-white/20">
-                  Become a Nanny
+                  Find a Cleaner
+                </Button>
+              </Link>
+              <Link to="/register-nanny">
+                <Button size="lg" variant="ghost" className="text-lg px-8 text-white hover:bg-white/10">
+                  Become a Nanny/Cleaner
                 </Button>
               </Link>
             </div>
           ) : (
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               {userRole === 'client' && (
-                <Link to="/find-nanny">
-                  <Button size="lg" variant="secondary" className="text-lg px-8">
-                    Browse Nannies
-                  </Button>
-                </Link>
+                <>
+                  <Link to="/find-nanny">
+                    <Button size="lg" variant="secondary" className="text-lg px-8">
+                      Browse Nannies
+                    </Button>
+                  </Link>
+                  <Link to="/find-cleaner">
+                    <Button size="lg" variant="outline" className="text-lg px-8 bg-white/10 border-white/20 text-white hover:bg-white/20">
+                      Find Cleaners
+                    </Button>
+                  </Link>
+                </>
               )}
               {userRole === 'nanny' && (
                 <Link to="/nanny-dashboard">
@@ -169,7 +252,7 @@ export default function Home() {
               Why Choose Nanny Placements SA?
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              We ensure the highest standards of safety and quality in childcare placement
+              We ensure the highest standards of safety and quality in childcare and cleaning services
             </p>
           </div>
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
@@ -186,6 +269,53 @@ export default function Home() {
                 </CardContent>
               </Card>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* NEW: Find Cleaner Section */}
+      <section className="py-20 bg-gradient-to-br from-blue-50 to-green-50">
+        <div className="container mx-auto px-4">
+          <div className="text-center mb-16">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-primary/10 rounded-full mb-6">
+              <Sparkles className="h-8 w-8 text-primary" />
+            </div>
+            <h2 className="text-3xl md:text-4xl font-bold mb-4">
+              Need Cleaning Services?
+            </h2>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+              Browse verified cleaners with flexible service options to suit your needs
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-8 mb-12">
+            {cleaningFeatures.map((feature, index) => (
+              <Card key={index} className={`${feature.color} border-0 shadow-lg`}>
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between">
+                    <span>{feature.title}</span>
+                    <Badge variant="secondary" className="text-lg px-3 py-1">
+                      {feature.fee}
+                    </Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-muted-foreground mb-6">{feature.description}</p>
+                  <Link to="/find-cleaner">
+                    <Button className="w-full">Find Cleaners</Button>
+                  </Link>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          <div className="text-center">
+            <Link to="/find-cleaner">
+              <Button size="lg" className="px-8 py-6 text-lg">
+                <HomeIcon className="mr-2 h-5 w-5" />
+                Browse Cleaners
+              </Button>
+            </Link>
           </div>
         </div>
       </section>
@@ -211,7 +341,7 @@ export default function Home() {
               </CardHeader>
               <CardContent>
                 <p className="text-muted-foreground">
-                  Criminal background verification, credit checks and proof of residence for all nannies.
+                  Criminal background verification, credit checks and proof of residence for all nannies and cleaners.
                 </p>
               </CardContent>
             </Card>
@@ -220,11 +350,11 @@ export default function Home() {
                 <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
                   <Video className="h-8 w-8 text-primary" />
                 </div>
-                <CardTitle>Nanny Academy</CardTitle>
+                <CardTitle>Professional Training</CardTitle>
               </CardHeader>
               <CardContent>
                 <p className="text-muted-foreground">
-                  A basic training virtual program covering childcare,safety and foundational standards.
+                  A basic training virtual program covering childcare, cleaning standards, safety and foundational standards.
                 </p>
               </CardContent>
             </Card>
@@ -284,12 +414,15 @@ export default function Home() {
       {/* CTA Section */}
       <section className="py-20 bg-gradient-to-r from-primary to-primary/80 text-primary-foreground">
         <div className="container mx-auto px-4 text-center">
-          <Heart className="h-16 w-16 mx-auto mb-6 opacity-80" />
+          <div className="flex justify-center gap-6 mb-8">
+            <Heart className="h-16 w-16 opacity-80" />
+            <Sparkles className="h-16 w-16 opacity-80" />
+          </div>
           <h2 className="text-3xl md:text-4xl font-bold mb-4">
-            Ready to Find A Nanny That Matches Your Needs?
+            Ready to Find Trusted Help for Your Home?
           </h2>
           <p className="text-xl mb-8 opacity-90 max-w-2xl mx-auto">
-            Join thousands of families who have found trusted childcare through our platform
+            Join thousands of families who have found trusted nannies and cleaning services through our platform
           </p>
          
           {!user ? (
@@ -299,18 +432,32 @@ export default function Home() {
                   Get Started Today
                 </Button>
               </Link>
+              <div className="flex gap-4">
+                <Link to="/find-nanny">
+                  <Button size="lg" variant="outline" className="text-lg px-8 bg-white/10 border-white/20 text-white hover:bg-white/20">
+                    Browse Nannies
+                  </Button>
+                </Link>
+                <Link to="/find-cleaner">
+                  <Button size="lg" variant="outline" className="text-lg px-8 bg-white/10 border-white/20 text-white hover:bg-white/20">
+                    Find Cleaners
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link to="/find-nanny">
+                <Button size="lg" variant="secondary" className="text-lg px-8">
+                  Browse Available Nannies
+                </Button>
+              </Link>
+              <Link to="/find-cleaner">
                 <Button size="lg" variant="outline" className="text-lg px-8 bg-white/10 border-white/20 text-white hover:bg-white/20">
-                  Browse Nannies
+                  Browse Available Cleaners
                 </Button>
               </Link>
             </div>
-          ) : (
-            <Link to="/find-nanny">
-              <Button size="lg" variant="secondary" className="text-lg px-8">
-                Browse Available Nannies
-              </Button>
-            </Link>
           )}
         </div>
       </section>

@@ -8,6 +8,7 @@ import Navbar from "@/components/Layout/Navbar";
 import Home from "./pages/Home";
 import Auth from "./pages/Auth";
 import FindNanny from "./pages/FindNanny";
+import FindCleaner from "./pages/FindCleaner"; // Import the FindCleaner component
 import Academy from "./pages/Academy";
 import NannyDashboard from "./pages/NannyDashboard";
 import ClientDashboard from "./pages/ClientDashboard";
@@ -33,6 +34,7 @@ const App = () => (
               <Route path="/" element={<Home />} />
               <Route path="/auth" element={<Auth />} />
               <Route path="/find-nanny" element={<FindNanny />} />
+              <Route path="/find-cleaner" element={<FindCleaner />} /> {/* Added FindCleaner route */}
               <Route path="/register-nanny" element={<Auth />} />
               <Route path="/nanny-dashboard" element={<NannyDashboard />} />
               <Route path="/client-dashboard" element={<ClientDashboard />} />

@@ -6,7 +6,9 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Heart, MapPin, CheckCircle, X, Eye, CreditCard, Loader2 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Heart, MapPin, CheckCircle, X, Eye, CreditCard, Loader2, Star, Flag, MessageSquare } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -53,12 +55,14 @@ interface Nanny {
   date_of_birth: string | null;
   accommodation_preference: string | null;
   employment_type: string | null;
-  first_name: string | null; // From nannies table
-  last_name: string | null; // From nannies table
-  city: string | null; // From nannies table
-  suburb: string | null; // From nannies table
-  phone: string | null; // From nannies table
-  profiles?: Profile | Profile[]; // Optional join with profiles
+  first_name: string | null;
+  last_name: string | null;
+  city: string | null;
+  suburb: string | null;
+  phone: string | null;
+  average_rating: number | null;
+  review_count: number | null;
+  profiles?: Profile | Profile[];
 }
 
 interface Interest {
@@ -70,13 +74,24 @@ interface Interest {
   created_at: string;
   admin_approved: boolean | null;
   nanny_response: string | null;
-  payment_status: string | null; // This is in interests table
+  payment_status: string | null;
   client_first_name: string | null;
   client_last_name: string | null;
   client_email: string | null;
   nanny_first_name: string | null;
   nanny_last_name: string | null;
   nanny_email: string | null;
+}
+
+interface Review {
+  id: string;
+  nanny_id: string;
+  client_id: string;
+  rating: number;
+  complaint_text: string | null;
+  created_at: string;
+  client_first_name?: string;
+  client_last_name?: string;
 }
 
 // Map numeric experience_duration to dropdown labels
@@ -117,9 +132,18 @@ const languagesOptions = [
   'Pedi', 'Venda', 'Tsonga', 'Swati', 'Ndebele', 'Shona', 'Chewa'
 ];
 
+// Complaint types
+const complaintTypes = [
+  { value: 'service', label: 'Poor Service Quality' },
+  { value: 'conduct', label: 'Unprofessional Conduct' },
+  { value: 'payment', label: 'Payment Issues' },
+  { value: 'safety', label: 'Safety Concerns' },
+  { value: 'childcare', label: 'Childcare Issues' },
+  { value: 'other', label: 'Other Issues' }
+];
+
 // Helper function to extract profile info from nanny
 const getNannyProfileInfo = (nanny: Nanny) => {
-  // First check if we have profiles join
   if (nanny.profiles) {
     const profiles = Array.isArray(nanny.profiles) ? nanny.profiles[0] : nanny.profiles;
     return {
@@ -134,7 +158,6 @@ const getNannyProfileInfo = (nanny: Nanny) => {
     };
   }
   
-  // Fallback to nanny table fields
   return {
     first_name: nanny.first_name || 'No name',
     last_name: nanny.last_name || '',
@@ -152,29 +175,22 @@ const extractInterestId = (txRef: string): string | null => {
 
   if (!txRef) return null;
 
-  // Remove nanny- prefix
   let cleanRef = txRef.startsWith("nanny-") ? txRef.substring(6) : txRef;
-
   console.log("🔧 Clean ref after removing prefix:", cleanRef);
 
-  // Split into parts
   const parts = cleanRef.split("-");
   console.log("🔧 Parts after split:", parts);
 
-  // A UUID has 5 dashes → 6 parts
   if (parts.length < 6) {
     console.error("❌ Not enough parts for UUID");
     return null;
   }
 
-  // Correct: take first 6 parts (0–5)
   const uuid = parts.slice(0, 6).join("-");
-
   console.log("🔧 Extracted interest ID:", uuid);
-  console.log("🔧 UUID length:", uuid.length); // Should be 36
+  console.log("🔧 UUID length:", uuid.length);
 
-  const uuidRegex =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
   if (!uuidRegex.test(uuid)) {
     console.error("❌ Invalid UUID format:", uuid);
@@ -184,14 +200,12 @@ const extractInterestId = (txRef: string): string | null => {
   return uuid;
 };
 
-// NEW: Send interest notification using dedicated PHP endpoint
+// Email functions
 const sendInterestNotificationEmail = async (emailData: any): Promise<{success: boolean, message?: string}> => {
   try {
     const response = await fetch('https://nannyplacementssouthafrica.co.za/send-interest-notification.php', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(emailData),
     });
 
@@ -210,14 +224,11 @@ const sendInterestNotificationEmail = async (emailData: any): Promise<{success: 
   }
 };
 
-// NEW: Send payment success email using dedicated PHP endpoint
 const sendPaymentSuccessEmail = async (emailData: any): Promise<{success: boolean, message?: string}> => {
   try {
     const response = await fetch('https://nannyplacementssouthafrica.co.za/send-payment-success.php', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(emailData),
     });
 
@@ -236,12 +247,40 @@ const sendPaymentSuccessEmail = async (emailData: any): Promise<{success: boolea
   }
 };
 
-// Payment processing function
+const sendReviewNotificationEmail = async (data: any): Promise<{success: boolean, message?: string}> => {
+  try {
+    const response = await fetch('https://nannyplacementssouthafrica.co.za/send-review-notification.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    const result = await response.json();
+    return response.ok ? { success: true } : { success: false, message: result.error };
+  } catch (error) {
+    console.error('Review notification error:', error);
+    return { success: false, message: 'Failed to send review notification' };
+  }
+};
+
+const sendComplaintNotificationEmail = async (data: any): Promise<{success: boolean, message?: string}> => {
+  try {
+    const response = await fetch('https://nannyplacementssouthafrica.co.za/send-complaint-notification.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    const result = await response.json();
+    return response.ok ? { success: true } : { success: false, message: result.error };
+  } catch (error) {
+    console.error('Complaint notification error:', error);
+    return { success: false, message: 'Failed to send complaint notification' };
+  }
+};
+
 const processPaymentSuccess = async (interestId: string, transactionId: string, clientData: any) => {
   try {
     console.log('🔄 Starting payment processing for interest:', interestId);
     
-    // 1. First check if payment already exists
     const { data: existingPayments, error: paymentCheckError } = await supabase
       .from('payments')
       .select('*')
@@ -257,7 +296,6 @@ const processPaymentSuccess = async (interestId: string, transactionId: string, 
     if (existingPayment) {
       console.log('✅ Payment already exists in payments table');
       
-      // Check if interest payment_status is already updated
       const { data: existingInterest } = await supabase
         .from('interests')
         .select('payment_status')
@@ -265,7 +303,6 @@ const processPaymentSuccess = async (interestId: string, transactionId: string, 
         .single();
 
       if (existingInterest && existingInterest.payment_status !== 'completed') {
-        // Update interest payment_status
         console.log('🔄 Updating interest payment_status...');
         const { error: interestUpdateError } = await supabase
           .from('interests')
@@ -285,7 +322,6 @@ const processPaymentSuccess = async (interestId: string, transactionId: string, 
       return true;
     }
 
-    // 2. Get interest details
     console.log('🔍 Getting interest details...');
     const { data: interestData, error: interestError } = await supabase
       .from('interests')
@@ -298,7 +334,6 @@ const processPaymentSuccess = async (interestId: string, transactionId: string, 
       throw new Error('Interest record not found');
     }
 
-    // 3. Create payment record in payments table
     console.log('💰 Creating payment record...');
     const { error: paymentError } = await supabase
       .from('payments')
@@ -307,7 +342,7 @@ const processPaymentSuccess = async (interestId: string, transactionId: string, 
         nanny_id: interestData.nanny_id,
         interest_id: interestId,
         amount: 200.00,
-        status: 'completed', // This goes to payments.status column
+        status: 'completed',
         payment_method: 'flutterwave',
         transaction_id: transactionId,
         created_at: new Date().toISOString()
@@ -319,13 +354,12 @@ const processPaymentSuccess = async (interestId: string, transactionId: string, 
     }
     console.log('✅ Payment record created');
 
-    // 4. Update interest payment_status (in interests table)
     console.log('🔄 Updating interest payment_status...');
     const { error: interestUpdateError } = await supabase
       .from('interests')
       .update({
-        payment_status: 'completed', // This goes to interests.payment_status column
-        status: 'approved' // Also update the main status field
+        payment_status: 'completed',
+        status: 'approved'
       })
       .eq('id', interestId);
 
@@ -368,6 +402,15 @@ export default function FindNanny() {
   const [existingInterests, setExistingInterests] = useState<Interest[]>([]);
   const [refreshCount, setRefreshCount] = useState(0);
   const [processingPayment, setProcessingPayment] = useState<string | null>(null);
+  
+  // Review/Complaint state
+  const [activeTab, setActiveTab] = useState<'review' | 'complaint'>('review');
+  const [rating, setRating] = useState(0);
+  const [reviewText, setReviewText] = useState('');
+  const [complaintType, setComplaintType] = useState('');
+  const [complaintText, setComplaintText] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [userReviews, setUserReviews] = useState<Review[]>([]);
 
   const hasRole = userRole === 'client';
 
@@ -386,13 +429,11 @@ export default function FindNanny() {
   // Handle payment redirect after successful payment
   useEffect(() => {
     const handlePaymentRedirect = async () => {
-      // Prevent multiple processing
       if (hasProcessedRedirect.current) {
         console.log('⏸️ Already processed redirect, skipping...');
         return;
       }
 
-      // Wait for auth to load
       if (authLoading) {
         console.log('⏳ Waiting for auth to load...');
         return;
@@ -410,25 +451,20 @@ export default function FindNanny() {
         console.log('✅ Payment successful redirect detected, starting processing...');
         
         try {
-          // Get client info
           if (!user) {
             console.log('⏸️ No user, skipping payment processing');
-            // Clear URL parameters
             window.history.replaceState({}, document.title, window.location.pathname);
             hasProcessedRedirect.current = false;
             return;
           }
 
-          // Check if user has client role
           if (userRole !== 'client') {
             console.log('⏸️ User is not a client');
-            // Clear URL parameters
             window.history.replaceState({}, document.title, window.location.pathname);
             hasProcessedRedirect.current = false;
             return;
           }
 
-          // Extract interest ID
           const interestId = extractInterestId(txRef);
           if (!interestId) {
             toast({
@@ -443,7 +479,6 @@ export default function FindNanny() {
 
           console.log('🎯 Processing payment for interest:', interestId);
 
-          // Get client record
           const { data: clientData, error: clientError } = await supabase
             .from('clients')
             .select('id')
@@ -464,7 +499,6 @@ export default function FindNanny() {
 
           console.log('👤 Client found:', clientData.id);
 
-          // First, check if interest exists and get nanny_id
           const { data: interestData, error: interestError } = await supabase
             .from('interests')
             .select('id, nanny_id, client_id, payment_status, status')
@@ -483,7 +517,6 @@ export default function FindNanny() {
             return;
           }
 
-          // Verify client owns this interest
           if (interestData.client_id !== clientData.id) {
             console.error('❌ Client mismatch');
             toast({
@@ -496,7 +529,6 @@ export default function FindNanny() {
             return;
           }
 
-          // Check if already paid in interests table
           if (interestData.payment_status === 'completed') {
             console.log('✅ Interest already paid (payment_status is completed)');
             toast({
@@ -508,10 +540,8 @@ export default function FindNanny() {
             return;
           }
 
-          // Process the payment
           await processPaymentSuccess(interestId, transactionId, clientData);
 
-          // Get nanny and client info for email
           const { data: nannyData } = await supabase
             .from('nannies')
             .select('first_name, last_name')
@@ -524,14 +554,12 @@ export default function FindNanny() {
             .eq('id', user.id)
             .single();
 
-          // Get nanny contact info from profiles table
           const { data: nannyProfile } = await supabase
             .from('profiles')
             .select('phone, email')
             .eq('id', interestData.nanny_id)
             .single();
 
-          // Send payment success email (silently fail if email doesn't work)
           if (nannyData && clientProfile) {
             console.log('📧 Attempting to send payment success email...');
             
@@ -555,20 +583,14 @@ export default function FindNanny() {
             description: "Contact details have been unlocked. Refreshing...",
           });
 
-          // Clear URL and refresh interests
           window.history.replaceState({}, document.title, '/find-nanny');
-
-          // Refresh interests data
           await fetchExistingInterests();
-
-          // Force refresh of nannies data
           setRefreshCount(prev => prev + 1);
 
           console.log('✅ Payment processed successfully');
 
         } catch (error: any) {
           console.error('❌ Error processing payment redirect:', error);
-          // Don't show error toast for common issues
           if (!error.message?.includes('already processed') && 
               !error.message?.includes('already paid')) {
             toast({
@@ -578,7 +600,6 @@ export default function FindNanny() {
             });
           }
         } finally {
-          // Reset after a longer delay
           setTimeout(() => {
             hasProcessedRedirect.current = false;
           }, 10000);
@@ -610,8 +631,13 @@ export default function FindNanny() {
   }, [user, hasRole, refreshCount]);
 
   useEffect(() => {
+    if (selectedNanny && user) {
+      fetchUserReviews();
+    }
+  }, [selectedNanny, user]);
+
+  useEffect(() => {
     return () => {
-      // Cleanup any pending timeouts on component unmount
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
   }, []);
@@ -662,7 +688,6 @@ export default function FindNanny() {
 
     try {
       console.log('🔍 Fetching client interests...');
-      // Get client ID from clients table using user_id
       const { data: clientData } = await supabase
         .from('clients')
         .select('id')
@@ -699,7 +724,6 @@ export default function FindNanny() {
         console.log('📋 Fetched interests with payment_status:', interests);
         setExistingInterests(interests || []);
         
-        // Also check payments table for verification
         const { data: payments } = await supabase
           .from('payments')
           .select('interest_id, status')
@@ -708,14 +732,12 @@ export default function FindNanny() {
           
         console.log('💳 Completed payments from payments table:', payments);
         
-        // Double-check: if payment exists but interest payment_status not updated, fix it
         if (payments && payments.length > 0) {
           console.log('🔄 Verifying payment_status consistency...');
           for (const payment of payments) {
             const interest = interests?.find(i => i.id === payment.interest_id);
             if (interest && interest.payment_status !== 'completed') {
               console.warn(`⚠️ Inconsistency found: Payment exists for interest ${payment.interest_id} but payment_status is not 'completed'`);
-              // Auto-fix the inconsistency
               await supabase
                 .from('interests')
                 .update({ 
@@ -733,6 +755,36 @@ export default function FindNanny() {
     } catch (error) {
       console.error('Error fetching existing interests:', error);
       setExistingInterests([]);
+    }
+  };
+
+  const fetchUserReviews = async () => {
+    if (!user || !selectedNanny) return;
+
+    try {
+      const { data: client } = await supabase
+        .from('clients')
+        .select('id')
+        .eq('user_id', user.id)
+        .single();
+
+      if (client) {
+        const { data: reviews, error } = await supabase
+          .from('reviews')
+          .select('*')
+          .eq('nanny_id', selectedNanny.id)
+          .eq('client_id', client.id);
+
+        if (error) {
+          console.error('❌ Error fetching user reviews:', error);
+          return;
+        }
+
+        console.log('📋 Fetched user reviews:', reviews);
+        setUserReviews(reviews || []);
+      }
+    } catch (error) {
+      console.error('Error fetching user reviews:', error);
     }
   };
 
@@ -769,21 +821,13 @@ export default function FindNanny() {
     return interest || null;
   };
 
-  const hasInterestForNanny = (nannyId: string): boolean => {
-    return existingInterests.some(i => i.nanny_id === nannyId);
-  };
-
-  // Check if interest is approved by nanny (either through status or nanny_response)
   const isInterestApprovedByNanny = (interest: Interest | null): boolean => {
     if (!interest) return false;
-        
-    // Check multiple approval indicators
     return interest.status === 'approved' || 
            interest.nanny_response === 'approved' || 
            interest.admin_approved === true;
   };
 
-  // Check if payment is completed - using payment_status from interests table
   const isPaymentCompleted = (interest: Interest | null): boolean => {
     if (!interest) return false;
     console.log('🔍 Checking payment status for interest:', {
@@ -794,12 +838,10 @@ export default function FindNanny() {
     return interest.payment_status === 'completed';
   };
 
-  // UPDATED: Send interest notification emails using new PHP endpoint
   const sendInterestNotificationEmails = async (nanny: Nanny, clientProfile: any, message: string) => {
     try {
       const nannyProfile = getNannyProfileInfo(nanny);
       
-      // Send to nanny using new PHP endpoint
       const nannyEmailData = {
         to: nannyProfile.email,
         subject: 'New Client Interest - Nanny Placements SA',
@@ -811,7 +853,6 @@ export default function FindNanny() {
 
       const result = await sendInterestNotificationEmail(nannyEmailData);
       
-      // Also send confirmation to client (optional, as PHP might handle it)
       if (result.success) {
         console.log('Interest notification sent successfully');
       } else {
@@ -842,7 +883,6 @@ export default function FindNanny() {
         return;
       }
 
-      // Get or create client record
       let clientId;
       const { data: existingClient } = await supabase
         .from('clients')
@@ -853,7 +893,6 @@ export default function FindNanny() {
       if (existingClient) {
         clientId = existingClient.id;
       } else {
-        // Create client record if it doesn't exist
         const { data: profileData } = await supabase
           .from('profiles')
           .select('first_name, last_name, email, phone, city, suburb')
@@ -889,7 +928,6 @@ export default function FindNanny() {
 
       if (profileError || !clientProfile) throw new Error('Failed to fetch client profile');
 
-      // Check if interest already exists
       const { data: existingInterest, error: checkError } = await supabase
         .from('interests')
         .select('id')
@@ -932,7 +970,6 @@ export default function FindNanny() {
 
       if (error) throw error;
 
-      // Send notification emails using NEW PHP endpoint
       await sendInterestNotificationEmails(selectedNanny, clientProfile, interestMessage);
 
       toast({
@@ -955,29 +992,6 @@ export default function FindNanny() {
     }
   };
 
-  // UPDATED: Send payment success email using new PHP endpoint
-  const sendPaymentSuccessEmailToClient = async (clientProfile: any, nannyData: any, nannyContactInfo: any, transactionId: string) => {
-    try {
-      const emailData = {
-        to: clientProfile?.email || user?.email || "",
-        client_name: `${clientProfile?.first_name} ${clientProfile?.last_name || ''}`,
-        nanny_name: `${nannyData.first_name} ${nannyData.last_name || ''}`,
-        nanny_phone: nannyContactInfo?.phone || 'Not provided',
-        nanny_email: nannyContactInfo?.email || 'Not provided',
-        transaction_id: transactionId,
-        amount: '200.00'
-      };
-
-      const result = await sendPaymentSuccessEmail(emailData);
-      console.log('Payment success email result:', result);
-      return result.success;
-    } catch (emailError) {
-      console.error('Error sending payment success email:', emailError);
-      return false;
-    }
-  };
-
-  // Flutterwave payment function for individual nanny
   const handlePayment = async (nanny: Nanny, interestId: string) => {
     if (!window.FlutterwaveCheckout) {
       toast({
@@ -991,7 +1005,6 @@ export default function FindNanny() {
     setProcessingPayment(nanny.id);
         
     try {
-      // Get client info from clients table
       const { data: clientData } = await supabase
         .from('clients')
         .select('id')
@@ -1008,7 +1021,6 @@ export default function FindNanny() {
         return;
       }
 
-      // Get client profile info from profiles table
       const { data: clientProfile } = await supabase
         .from('profiles')
         .select('first_name, last_name, email, phone')
@@ -1028,7 +1040,6 @@ export default function FindNanny() {
       }
 
       const nannyProfile = getNannyProfileInfo(nanny);
-      // Generate a unique transaction reference with the FULL interest ID
       const timestamp = Date.now();
       const txRef = `nanny-${interestId}-${timestamp}`;
       
@@ -1066,7 +1077,6 @@ export default function FindNanny() {
             });
             
             console.log('✅ Payment successful, redirecting...');
-            // Redirect to the success URL - let the useEffect handle the processing
             window.location.href = `https://nannyplacementssouthafrica.co.za/find-nanny?status=successful&tx_ref=${encodeURIComponent(txRef)}&transaction_id=${response.transaction_id}`;
             
           } else {
@@ -1099,12 +1109,12 @@ export default function FindNanny() {
     if (!dateOfBirth) return null;
     try {
       const birthDate = new Date(dateOfBirth);
-      if (isNaN(birthDate.getTime())) return null; // Invalid date
+      if (isNaN(birthDate.getTime())) return null;
       const today = new Date();
       let age = today.getFullYear() - birthDate.getFullYear();
       const monthDiff = today.getMonth() - birthDate.getMonth();
       if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-        age--; // Birthday hasn't occurred this year
+        age--;
       }
       return age;
     } catch (error) {
@@ -1138,7 +1148,6 @@ export default function FindNanny() {
           accommodationPreference: clientData.preferred_accommodation_type === 'stay_out' ? 'live_out' : clientData.preferred_accommodation_type || ''
         };
 
-        // Count matching profiles
         const matchingNannies = nannies.filter(nanny => {
           if (newFilters.employmentType && newFilters.employmentType !== 'all' && nanny.employment_type !== newFilters.employmentType) {
             return false;
@@ -1207,6 +1216,123 @@ export default function FindNanny() {
         : [...prev.languages, lang];
       return { ...prev, languages: newLanguages };
     });
+  };
+
+  const submitReviewOrComplaint = async () => {
+    if (!selectedNanny || !user) return;
+    
+    if (activeTab === 'review' && rating === 0) {
+      toast({
+        title: "Rating Required",
+        description: "Please select a rating before submitting your review.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (activeTab === 'complaint' && (!complaintType || !complaintText.trim())) {
+      toast({
+        title: "Complaint Details Required",
+        description: "Please select a complaint type and provide details.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const { data: client } = await supabase
+        .from('clients')
+        .select('id')
+        .eq('user_id', user.id)
+        .single();
+
+      if (!client) throw new Error('Client not found');
+
+      // Check if user has already reviewed this nanny
+      const { data: existingReview } = await supabase
+        .from('reviews')
+        .select('id')
+        .eq('nanny_id', selectedNanny.id)
+        .eq('client_id', client.id)
+        .single();
+
+      if (existingReview) {
+        throw new Error('You have already submitted feedback for this nanny');
+      }
+
+      // Insert review/complaint
+      const { error: reviewError } = await supabase
+        .from('reviews')
+        .insert({
+          nanny_id: selectedNanny.id,
+          client_id: client.id,
+          rating: activeTab === 'review' ? rating : null,
+          complaint_text: activeTab === 'complaint' ? `${complaintType}: ${complaintText}` : reviewText.trim() || null,
+          created_at: new Date().toISOString()
+        });
+
+      if (reviewError) throw reviewError;
+
+      // Get client profile for email
+      const { data: clientProfile } = await supabase
+        .from('profiles')
+        .select('first_name, last_name, email')
+        .eq('id', user.id)
+        .single();
+
+      const nannyProfile = getNannyProfileInfo(selectedNanny);
+
+      // Send appropriate notification email
+      if (clientProfile) {
+        if (activeTab === 'review') {
+          await sendReviewNotificationEmail({
+            to: 'admin@nannyplacementssouthafrica.co.za',
+            client_name: `${clientProfile.first_name} ${clientProfile.last_name || ''}`,
+            client_email: clientProfile.email,
+            nanny_name: `${nannyProfile.first_name} ${nannyProfile.last_name || ''}`,
+            rating: rating,
+            review_text: reviewText.trim() || 'No review text provided'
+          }).catch(err => console.error('Review notification email failed:', err));
+        } else {
+          await sendComplaintNotificationEmail({
+            to: 'admin@nannyplacementssouthafrica.co.za',
+            client_name: `${clientProfile.first_name} ${clientProfile.last_name || ''}`,
+            client_email: clientProfile.email,
+            nanny_name: `${nannyProfile.first_name} ${nannyProfile.last_name || ''}`,
+            complaint_type: complaintType,
+            complaint_text: complaintText.trim()
+          }).catch(err => console.error('Complaint notification email failed:', err));
+        }
+      }
+
+      toast({
+        title: activeTab === 'review' ? "Thank You!" : "Complaint Submitted",
+        description: activeTab === 'review' 
+          ? "Your review has been submitted successfully."
+          : "Your complaint has been submitted. Admin will review it shortly."
+      });
+
+      // Reset form
+      setRating(0);
+      setReviewText('');
+      setComplaintType('');
+      setComplaintText('');
+      setUserReviews([]);
+      
+      // Refresh nanny data to show updated rating
+      fetchNannies();
+
+    } catch (error: any) {
+      console.error('Error submitting feedback:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to submit feedback",
+        variant: "destructive"
+      });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const filteredNannies = nannies.filter(nanny => {
@@ -1405,14 +1531,7 @@ export default function FindNanny() {
           const hasInterest = !!interest;
           const isApproved = interest ? isInterestApprovedByNanny(interest) : false;
           const isPaid = interest ? isPaymentCompleted(interest) : false;
-          console.log(`Nanny ${nanny.id}:`, { 
-            hasInterest, 
-            isApproved, 
-            isPaid, 
-            payment_status: interest?.payment_status,
-            status: interest?.status
-          });
-
+          
           return (
             <Card key={nanny.id} className="hover:shadow-lg transition-shadow">
               <CardContent className="p-6">
@@ -1443,6 +1562,20 @@ export default function FindNanny() {
                       <p className="text-xs text-muted-foreground capitalize">
                         {nanny.accommodation_preference.replace('_', ' ')} • {nanny.employment_type?.replace('_', ' ') || ''}
                       </p>
+                    )}
+                    {/* Display average rating */}
+                    {nanny.average_rating && (
+                      <div className="flex items-center gap-1 mt-1">
+                        <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                        <span className="text-xs font-medium">
+                          {nanny.average_rating.toFixed(1)}
+                          {nanny.review_count && (
+                            <span className="text-xs text-muted-foreground ml-1">
+                              ({nanny.review_count})
+                            </span>
+                          )}
+                        </span>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -1612,6 +1745,20 @@ export default function FindNanny() {
                           Age: {calculateAge(selectedNanny.date_of_birth)} years
                         </p>
                       )}
+                      {/* Display average rating in dialog */}
+                      {selectedNanny.average_rating && (
+                        <div className="flex items-center gap-1">
+                          <Star className="h-5 w-5 fill-yellow-400 text-yellow-400" />
+                          <span className="font-medium">
+                            {selectedNanny.average_rating.toFixed(1)}
+                            {selectedNanny.review_count && (
+                              <span className="text-sm text-muted-foreground ml-1">
+                                ({selectedNanny.review_count} reviews)
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                      )}
                     </div>
                     {selectedNanny.accommodation_preference && (
                       <p className="text-sm text-muted-foreground capitalize mt-1">
@@ -1699,7 +1846,133 @@ export default function FindNanny() {
                   </div>
                 )}
 
-                {user && hasRole && (
+                {/* Review/Complaint Section - Show for logged-in users */}
+                {user && (
+                  <div className="border-t pt-6">
+                    <h4 className="font-semibold mb-4 flex items-center gap-2">
+                      <MessageSquare className="h-5 w-5" /> Rate & Review or Lodge Complaint
+                    </h4>
+                    
+                    {userReviews.length > 0 ? (
+                      <div className="p-4 bg-gray-50 rounded-md mb-4">
+                        <p className="text-sm text-muted-foreground">
+                          You have already submitted feedback for this nanny.
+                        </p>
+                      </div>
+                    ) : (
+                      <>
+                        <Tabs value={activeTab} onValueChange={(value: any) => setActiveTab(value)} className="mb-4">
+                          <TabsList className="grid w-full grid-cols-2">
+                            <TabsTrigger value="review" className="flex items-center gap-2">
+                              <Star className="h-4 w-4" />
+                              Leave Review
+                            </TabsTrigger>
+                            <TabsTrigger value="complaint" className="flex items-center gap-2">
+                              <Flag className="h-4 w-4" />
+                              Lodge Complaint
+                            </TabsTrigger>
+                          </TabsList>
+                          
+                          <TabsContent value="review" className="space-y-4">
+                            <div>
+                              <Label className="mb-2 block">Rating</Label>
+                              <div className="flex gap-1">
+                                {[1, 2, 3, 4, 5].map((star) => (
+                                  <button
+                                    key={star}
+                                    type="button"
+                                    onClick={() => setRating(star)}
+                                    className="focus:outline-none"
+                                  >
+                                    <Star
+                                      className={`h-8 w-8 transition-colors ${
+                                        star <= rating
+                                          ? 'fill-yellow-400 text-yellow-400'
+                                          : 'text-gray-300 hover:text-yellow-300'
+                                      }`}
+                                    />
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                            
+                            <div>
+                              <Label htmlFor="review-text" className="mb-2 block">
+                                Your Review (Optional)
+                              </Label>
+                              <Textarea
+                                id="review-text"
+                                placeholder="Share your experience with this nanny..."
+                                value={reviewText}
+                                onChange={(e) => setReviewText(e.target.value)}
+                                rows={3}
+                                className="w-full"
+                              />
+                            </div>
+                          </TabsContent>
+                          
+                          <TabsContent value="complaint" className="space-y-4">
+                            <div>
+                              <Label htmlFor="complaint-type" className="mb-2 block">
+                                Complaint Type
+                              </Label>
+                              <Select value={complaintType} onValueChange={setComplaintType}>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select complaint type" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {complaintTypes.map((type) => (
+                                    <SelectItem key={type.value} value={type.value}>
+                                      {type.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            
+                            <div>
+                              <Label htmlFor="complaint-text" className="mb-2 block">
+                                Complaint Details
+                              </Label>
+                              <Textarea
+                                id="complaint-text"
+                                placeholder="Please provide details of your complaint..."
+                                value={complaintText}
+                                onChange={(e) => setComplaintText(e.target.value)}
+                                rows={4}
+                                className="w-full"
+                              />
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Your complaint will be reviewed by our admin team.
+                              </p>
+                            </div>
+                          </TabsContent>
+                        </Tabs>
+                        
+                        <Button
+                          onClick={submitReviewOrComplaint}
+                          disabled={submitting || 
+                            (activeTab === 'review' && rating === 0) ||
+                            (activeTab === 'complaint' && (!complaintType || !complaintText.trim()))}
+                          className="w-full"
+                        >
+                          {submitting ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Submitting...
+                            </>
+                          ) : activeTab === 'review' ? (
+                            'Submit Review'
+                          ) : (
+                            'Lodge Complaint'
+                          )}
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {user && hasRole && !isPaid && (
                   <div className="border-t pt-4">
                     <h4 className="font-semibold mb-2">Express Interest</h4>
                     <div className="space-y-3">

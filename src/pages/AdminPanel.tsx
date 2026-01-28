@@ -31,6 +31,15 @@ import {
   Clock,
   ChevronDown,
   ChevronUp,
+  Star,
+  Flag,
+  MessageSquare,
+  Filter,
+  Search,
+  AlertTriangle,
+  ThumbsUp,
+  ThumbsDown,
+  Archive,
 } from 'lucide-react';
 import {
   Dialog,
@@ -39,7 +48,9 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogFooter,
 } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface NannyProfile {
   proof_of_residence_status: string;
@@ -108,6 +119,37 @@ interface Interest {
   nanny_email: string | null;
 }
 
+// NEW: Review/Complaint interface
+interface ReviewComplaint {
+  id: string;
+  nanny_id: string;
+  client_id: string;
+  rating: number | null;
+  complaint_text: string | null;
+  status: 'pending' | 'resolved' | 'dismissed' | 'archived';
+  admin_response: string | null;
+  created_at: string;
+  updated_at: string;
+  nanny_first_name?: string;
+  nanny_last_name?: string;
+  nanny_email?: string;
+  client_first_name?: string;
+  client_last_name?: string;
+  client_email?: string;
+  nanny_profiles?: {
+    first_name: string;
+    last_name: string;
+    email: string;
+    phone: string | null;
+  };
+  client_profiles?: {
+    first_name: string;
+    last_name: string;
+    email: string;
+    phone: string | null;
+  };
+}
+
 // NEW: Function to send admin interest action email via dedicated PHP endpoint
 const sendAdminInterestActionEmail = async (emailData: any): Promise<{ success: boolean; message?: string }> => {
   try {
@@ -160,6 +202,32 @@ const sendNannyNotificationEmail = async (emailData: any): Promise<{ success: bo
   }
 };
 
+// NEW: Function to send review/complaint status update email
+const sendReviewStatusEmail = async (emailData: any): Promise<{ success: boolean; message?: string }> => {
+  try {
+    const response = await fetch('https://nannyplacementssouthafrica.co.za/send-review-status-email.php', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(emailData),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error('Review status email API error:', data);
+      return { success: false, message: data.error };
+    }
+
+    console.log('Review status email sent successfully:', data);
+    return { success: true, message: 'Email sent successfully' };
+  } catch (error) {
+    console.error('Review status email sending error:', error);
+    return { success: false, message: 'Failed to send email' };
+  }
+};
+
 export default function AdminPanel() {
   const { user, userRole } = useAuth();
   const { toast } = useToast();
@@ -182,6 +250,16 @@ export default function AdminPanel() {
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedNannyId, setExpandedNannyId] = useState<string | null>(null);
 
+  // NEW STATES for reviews/complaints
+  const [reviewsComplaints, setReviewsComplaints] = useState<ReviewComplaint[]>([]);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [filterType, setFilterType] = useState<'all' | 'review' | 'complaint'>('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'resolved' | 'dismissed' | 'archived'>('all');
+  const [reviewSearch, setReviewSearch] = useState('');
+  const [selectedReview, setSelectedReview] = useState<ReviewComplaint | null>(null);
+  const [adminResponse, setAdminResponse] = useState('');
+  const [updatingReview, setUpdatingReview] = useState(false);
+
   useEffect(() => {
     if (user && userRole === 'admin') {
       fetchData();
@@ -195,6 +273,13 @@ export default function AdminPanel() {
       return () => {
         supabase.removeChannel(subscription);
       };
+    }
+  }, [user, userRole]);
+
+  // NEW: Fetch reviews and complaints
+  useEffect(() => {
+    if (user && userRole === 'admin') {
+      fetchReviewsComplaints();
     }
   }, [user, userRole]);
 
@@ -247,6 +332,135 @@ export default function AdminPanel() {
     }
   };
 
+  // NEW: Fetch all reviews and complaints
+  const fetchReviewsComplaints = async () => {
+  try {
+    setReviewsLoading(true);
+    
+    // Get all reviews with direct foreign key relationships
+    const { data: reviewsData, error: reviewsError } = await supabase
+      .from('reviews')
+      .select(`
+        *,
+        nannies!reviews_nanny_id_fkey (
+          first_name,
+          last_name,
+          user_id
+        ),
+        clients!reviews_client_id_fkey (
+          first_name,
+          last_name,
+          user_id
+        )
+      `)
+      .order('created_at', { ascending: false });
+
+    if (reviewsError) {
+      console.error('Error fetching reviews:', reviewsError);
+      return;
+    }
+
+    // Process reviews to get profile information
+    const transformedReviews = await Promise.all(
+      (reviewsData || []).map(async (review: any) => {
+        try {
+          // Nanny info from nannies table
+          const nanny = review.nannies || {};
+          
+          // Client info from clients table
+          const client = review.clients || {};
+          
+          // Get email/phone for nanny from profiles table
+          let nannyEmail = '';
+          let nannyPhone = '';
+          if (nanny.user_id) {
+            const { data: nannyProfile } = await supabase
+              .from('profiles')
+              .select('email, phone')
+              .eq('id', nanny.user_id)
+              .single();
+            nannyEmail = nannyProfile?.email || '';
+            nannyPhone = nannyProfile?.phone || '';
+          } else if (nanny.id) {
+            // Fallback: try to get profile using nanny id directly
+            const { data: nannyProfile } = await supabase
+              .from('profiles')
+              .select('email, phone')
+              .eq('id', nanny.id)
+              .single();
+            nannyEmail = nannyProfile?.email || '';
+            nannyPhone = nannyProfile?.phone || '';
+          }
+
+          // Get email for client from profiles table
+          let clientEmail = '';
+          if (client.user_id) {
+            const { data: clientProfile } = await supabase
+              .from('profiles')
+              .select('email')
+              .eq('id', client.user_id)
+              .single();
+            clientEmail = clientProfile?.email || '';
+          } else if (client.id) {
+            // Fallback: try to get profile using client id directly
+            const { data: clientProfile } = await supabase
+              .from('profiles')
+              .select('email')
+              .eq('id', client.id)
+              .single();
+            clientEmail = clientProfile?.email || '';
+          }
+
+          return {
+            id: review.id,
+            nanny_id: review.nanny_id,
+            client_id: review.client_id,
+            rating: review.rating,
+            complaint_text: review.complaint_text,
+            status: review.status || 'pending',
+            admin_response: review.admin_response,
+            created_at: review.created_at,
+            updated_at: review.updated_at || review.created_at,
+            nanny_first_name: nanny.first_name || 'Unknown Nanny',
+            nanny_last_name: nanny.last_name || '',
+            nanny_email: nannyEmail,
+            client_first_name: client.first_name || 'Unknown Client',
+            client_last_name: client.last_name || '',
+            client_email: clientEmail,
+          };
+        } catch (error) {
+          console.error('Error processing review:', review.id, error);
+          // Return basic info if we can't get all data
+          return {
+            id: review.id,
+            nanny_id: review.nanny_id,
+            client_id: review.client_id,
+            rating: review.rating,
+            complaint_text: review.complaint_text,
+            status: review.status || 'pending',
+            admin_response: review.admin_response,
+            created_at: review.created_at,
+            updated_at: review.updated_at || review.created_at,
+            nanny_first_name: 'Unknown Nanny',
+            nanny_last_name: '',
+            nanny_email: '',
+            client_first_name: 'Unknown Client',
+            client_last_name: '',
+            client_email: '',
+          };
+        }
+      })
+    );
+
+    setReviewsComplaints(transformedReviews);
+    
+  } catch (error) {
+    console.error('Error fetching reviews/complaints:', error);
+  } finally {
+    setReviewsLoading(false);
+  }
+};
+
   // ───────────────────────────────────────────────
   // LIVE SEARCH + ALPHABETICAL SORT BY LAST NAME
   // ───────────────────────────────────────────────
@@ -273,6 +487,43 @@ export default function AdminPanel() {
 
     return result;
   }, [nannies, searchQuery]);
+
+  // NEW: Filter reviews/complaints
+  const filteredReviewsComplaints = useMemo(() => {
+    let result = [...reviewsComplaints];
+
+    // Filter by type
+    if (filterType !== 'all') {
+      if (filterType === 'review') {
+        result = result.filter(item => item.rating !== null);
+      } else if (filterType === 'complaint') {
+        result = result.filter(item => item.complaint_text !== null);
+      }
+    }
+
+    // Filter by status
+    if (filterStatus !== 'all') {
+      result = result.filter(item => item.status === filterStatus);
+    }
+
+    // Search filter
+    if (reviewSearch.trim()) {
+      const q = reviewSearch.toLowerCase().trim();
+      result = result.filter(item => {
+        const nannyName = `${item.nanny_first_name || ''} ${item.nanny_last_name || ''}`.toLowerCase();
+        const clientName = `${item.client_first_name || ''} ${item.client_last_name || ''}`.toLowerCase();
+        const complaintText = item.complaint_text?.toLowerCase() || '';
+        const adminResponse = item.admin_response?.toLowerCase() || '';
+        
+        return nannyName.includes(q) || 
+               clientName.includes(q) || 
+               complaintText.includes(q) ||
+               adminResponse.includes(q);
+      });
+    }
+
+    return result;
+  }, [reviewsComplaints, filterType, filterStatus, reviewSearch]);
 
   const updateDocumentStatus = async (nannyId: string, field: string, status: string) => {
     try {
@@ -443,6 +694,147 @@ export default function AdminPanel() {
     }
   };
 
+  // NEW: Update review/complaint status
+  const updateReviewStatus = async (reviewId: string, status: ReviewComplaint['status'], responseText?: string) => {
+    try {
+      setUpdatingReview(true);
+      
+      const updates: any = {
+        status: status,
+        updated_at: new Date().toISOString()
+      };
+
+      if (responseText) {
+        updates.admin_response = responseText;
+      }
+
+      const { error } = await supabase
+        .from('reviews')
+        .update(updates)
+        .eq('id', reviewId);
+
+      if (error) throw error;
+
+      // Update local state
+      setReviewsComplaints(reviewsComplaints.map(review => 
+        review.id === reviewId 
+          ? { 
+              ...review, 
+              status, 
+              admin_response: responseText || review.admin_response,
+              updated_at: new Date().toISOString()
+            } 
+          : review
+      ));
+
+      // Send notification email to client and nanny
+      const review = reviewsComplaints.find(r => r.id === reviewId);
+      if (review) {
+        const isReview = review.rating !== null;
+        
+        // Send to client
+        await sendReviewStatusEmail({
+          to: review.client_email || '',
+          subject: `Update on Your ${isReview ? 'Review' : 'Complaint'} - Nanny Placements SA`,
+          client_name: `${review.client_first_name} ${review.client_last_name || ''}`,
+          nanny_name: `${review.nanny_first_name} ${review.nanny_last_name || ''}`,
+          type: isReview ? 'review' : 'complaint',
+          status: status,
+          admin_message: responseText || '',
+          rating: review.rating
+        }).catch(err => console.error('Failed to send client email:', err));
+
+        // Send to nanny (only if it's a complaint or negative review)
+        if (!isReview || (review.rating && review.rating <= 2)) {
+          await sendReviewStatusEmail({
+            to: review.nanny_email || '',
+            subject: `Update on Client ${isReview ? 'Review' : 'Complaint'} - Nanny Placements SA`,
+            nanny_name: `${review.nanny_first_name} ${review.nanny_last_name || ''}`,
+            client_name: `${review.client_first_name} ${review.client_last_name || ''}`,
+            type: isReview ? 'review' : 'complaint',
+            status: status,
+            admin_message: responseText || '',
+            rating: review.rating
+          }).catch(err => console.error('Failed to send nanny email:', err));
+        }
+      }
+
+      const isReview = review?.rating !== null;
+      
+      toast({
+        title: 'Success',
+        description: `${isReview ? 'Review' : 'Complaint'} marked as ${status}`,
+      });
+
+      // Close dialog if open
+      setSelectedReview(null);
+      setAdminResponse('');
+      
+    } catch (error: any) {
+      console.error('Error updating review status:', error);
+      toast({ 
+        title: 'Error', 
+        description: error.message || 'Failed to update status', 
+        variant: 'destructive' 
+      });
+    } finally {
+      setUpdatingReview(false);
+    }
+  };
+
+  // NEW: Archive a review/complaint
+  const archiveReview = async (reviewId: string) => {
+    try {
+      const { error } = await supabase
+        .from('reviews')
+        .update({ 
+          status: 'archived',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', reviewId);
+
+      if (error) throw error;
+
+      setReviewsComplaints(reviewsComplaints.map(review => 
+        review.id === reviewId 
+          ? { ...review, status: 'archived', updated_at: new Date().toISOString() } 
+          : review
+      ));
+
+      toast({ title: 'Success', description: 'Item archived successfully' });
+    } catch (error: any) {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    }
+  };
+
+  // NEW: Get status badge color
+  const getStatusBadge = (status: ReviewComplaint['status']) => {
+    switch (status) {
+      case 'pending': return { color: 'bg-yellow-500', text: 'Pending' };
+      case 'resolved': return { color: 'bg-green-500', text: 'Resolved' };
+      case 'dismissed': return { color: 'bg-gray-500', text: 'Dismissed' };
+      case 'archived': return { color: 'bg-blue-500', text: 'Archived' };
+      default: return { color: 'bg-gray-500', text: status };
+    }
+  };
+
+  // NEW: Get type badge
+  const getTypeBadge = (review: ReviewComplaint) => {
+    if (review.rating !== null) {
+      return { 
+        color: 'bg-blue-500', 
+        text: `Review (${review.rating}★)`,
+        icon: <Star className="h-3 w-3 mr-1" />
+      };
+    } else {
+      return { 
+        color: 'bg-red-500', 
+        text: 'Complaint',
+        icon: <Flag className="h-3 w-3 mr-1" />
+      };
+    }
+  };
+
   const isImageFile = (url: string) => {
     const ext = url.split('.').pop()?.toLowerCase();
     return ['jpg', 'jpeg', 'png', 'webp'].includes(ext || '');
@@ -473,17 +865,19 @@ export default function AdminPanel() {
           <Shield className="h-8 w-8" />
           Admin Panel
         </h1>
-        <p className="text-muted-foreground">Manage nannies, content, and platform operations</p>
+        <p className="text-muted-foreground">Manage nannies, content, reviews, and platform operations</p>
       </div>
 
       <Tabs defaultValue="nannies" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="nannies">Nannies</TabsTrigger>
           <TabsTrigger value="interests">Interests</TabsTrigger>
+          <TabsTrigger value="reviews">Reviews & Complaints</TabsTrigger>
           <TabsTrigger value="academy">Academy</TabsTrigger>
           <TabsTrigger value="payments">Payments</TabsTrigger>
         </TabsList>
 
+        {/* Existing Nannies Tab - unchanged */}
         <TabsContent value="nannies" className="space-y-6">
           <Card>
             <CardHeader>
@@ -611,9 +1005,7 @@ export default function AdminPanel() {
                               </div>
 
                               <div className="space-y-4">
-                                {/* ───────────────────────────────
-                                    Criminal Check Section
-                                ─────────────────────────────── */}
+                                {/* Criminal Check Section */}
                                 <Card className="p-4 border-l-4 border-l-blue-500">
                                   <div className="flex items-center gap-2 mb-3">
                                     <FileText className="h-5 w-5 text-blue-500" />
@@ -688,9 +1080,7 @@ export default function AdminPanel() {
                                   </div>
                                 </Card>
 
-                                {/* ───────────────────────────────
-                                    Credit Check Section
-                                ─────────────────────────────── */}
+                                {/* Credit Check Section */}
                                 <Card className="p-4 border-l-4 border-l-purple-500">
                                   <div className="flex items-center gap-2 mb-3">
                                     <FileText className="h-5 w-5 text-purple-500" />
@@ -765,9 +1155,7 @@ export default function AdminPanel() {
                                   </div>
                                 </Card>
 
-                                {/* ───────────────────────────────
-                                    Proof of Residence Section
-                                ─────────────────────────────── */}
+                                {/* Proof of Residence Section */}
                                 <Card className="p-4 border-l-4 border-l-amber-500">
                                   <div className="flex items-center gap-2 mb-3">
                                     <FileText className="h-5 w-5 text-amber-500" />
@@ -842,9 +1230,7 @@ export default function AdminPanel() {
                                   </div>
                                 </Card>
 
-                                {/* ───────────────────────────────
-                                    Interview Video Section
-                                ─────────────────────────────── */}
+                                {/* Interview Video Section */}
                                 <Card className="p-4 border-l-4 border-l-red-500">
                                   <div className="flex items-center gap-2 mb-3">
                                     <Film className="h-5 w-5 text-red-500" />
@@ -1004,9 +1390,7 @@ export default function AdminPanel() {
           </Card>
         </TabsContent>
 
-        {/* ───────────────────────────────────────────────
-            INTERESTS TAB – completely unchanged
-        ─────────────────────────────────────────────── */}
+        {/* Existing Interests Tab - unchanged */}
         <TabsContent value="interests" className="space-y-6">
           <Card>
             <CardHeader>
@@ -1128,6 +1512,251 @@ export default function AdminPanel() {
           </Card>
         </TabsContent>
 
+        {/* NEW: Reviews & Complaints Tab */}
+        <TabsContent value="reviews" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <MessageSquare className="h-5 w-5" />
+                Reviews & Complaints Management ({filteredReviewsComplaints.length})
+              </CardTitle>
+              <CardDescription>Manage client reviews and complaints for nannies and cleaners</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {/* Filters and Search */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div>
+                  <Label htmlFor="type-filter">Type</Label>
+                  <Select value={filterType} onValueChange={(value: any) => setFilterType(value)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Filter by type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Types</SelectItem>
+                      <SelectItem value="review">Reviews Only</SelectItem>
+                      <SelectItem value="complaint">Complaints Only</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="status-filter">Status</Label>
+                  <Select value={filterStatus} onValueChange={(value: any) => setFilterStatus(value)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Filter by status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Statuses</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="resolved">Resolved</SelectItem>
+                      <SelectItem value="dismissed">Dismissed</SelectItem>
+                      <SelectItem value="archived">Archived</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="md:col-span-2">
+                  <Label htmlFor="review-search">Search</Label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="review-search"
+                      placeholder="Search by nanny name, client name, or complaint text..."
+                      value={reviewSearch}
+                      onChange={(e) => setReviewSearch(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {reviewsLoading ? (
+                <div className="text-center py-12">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+                  <p className="mt-2 text-muted-foreground">Loading reviews and complaints...</p>
+                </div>
+              ) : filteredReviewsComplaints.length === 0 ? (
+                <div className="text-center py-12">
+                  <MessageSquare className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+                  <p className="text-muted-foreground">
+                    {reviewSearch || filterType !== 'all' || filterStatus !== 'all'
+                      ? 'No matching reviews or complaints found'
+                      : 'No reviews or complaints yet'}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {filteredReviewsComplaints.map((item) => {
+                    const typeBadge = getTypeBadge(item);
+                    const statusBadge = getStatusBadge(item.status);
+                    const isReview = item.rating !== null;
+
+                    return (
+                      <Card key={item.id} className={`border-l-4 ${isReview ? 'border-l-blue-500' : 'border-l-red-500'}`}>
+                        <CardContent className="p-6">
+                          <div className="flex flex-col lg:flex-row justify-between items-start gap-6">
+                            <div className="flex-1 space-y-4">
+                              <div className="flex items-start justify-between">
+                                <div>
+                                  <h3 className="font-semibold text-lg">
+                                    {isReview ? 'Review' : 'Complaint'} from {item.client_first_name} {item.client_last_name}
+                                  </h3>
+                                  <p className="text-sm text-muted-foreground">
+                                    For {item.nanny_first_name} {item.nanny_last_name} • 
+                                    {new Date(item.created_at).toLocaleDateString('en-ZA', {
+                                      year: 'numeric',
+                                      month: 'long',
+                                      day: 'numeric',
+                                      hour: '2-digit',
+                                      minute: '2-digit'
+                                    })}
+                                  </p>
+                                </div>
+                                <div className="flex gap-2">
+                                  <Badge className={typeBadge.color}>
+                                    <div className="flex items-center">
+                                      {typeBadge.icon}
+                                      {typeBadge.text}
+                                    </div>
+                                  </Badge>
+                                  <Badge className={statusBadge.color}>
+                                    {statusBadge.text}
+                                  </Badge>
+                                </div>
+                              </div>
+
+                              {isReview && item.rating && (
+                                <div className="flex items-center gap-2">
+                                  <div className="flex">
+                                    {[1, 2, 3, 4, 5].map((star) => (
+                                      <Star
+                                        key={star}
+                                        className={`h-5 w-5 ${
+                                          star <= item.rating!
+                                            ? 'fill-yellow-400 text-yellow-400'
+                                            : 'text-gray-300'
+                                        }`}
+                                      />
+                                    ))}
+                                  </div>
+                                  <span className="font-medium">{item.rating}/5</span>
+                                </div>
+                              )}
+
+                              {item.complaint_text && (
+                                <div className="p-4 bg-red-50 rounded-lg border border-red-100">
+                                  <p className="font-medium text-red-700 mb-2">Complaint Details:</p>
+                                  <p className="text-red-600">{item.complaint_text}</p>
+                                </div>
+                              )}
+
+                              {item.admin_response && (
+                                <div className="p-4 bg-blue-50 rounded-lg border border-blue-100">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <Shield className="h-4 w-4 text-blue-600" />
+                                    <p className="font-medium text-blue-700">Admin Response:</p>
+                                  </div>
+                                  <p className="text-blue-600">{item.admin_response}</p>
+                                  <p className="text-xs text-blue-500 mt-2">
+                                    Updated: {new Date(item.updated_at).toLocaleDateString()}
+                                  </p>
+                                </div>
+                              )}
+
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t">
+                                <div>
+                                  <p className="text-sm font-medium text-muted-foreground">Client Information</p>
+                                  <p>{item.client_first_name} {item.client_last_name}</p>
+                                  <p className="text-sm text-muted-foreground">{item.client_email}</p>
+                                </div>
+                                <div>
+                                  <p className="text-sm font-medium text-muted-foreground">Nanny/Cleaner Information</p>
+                                  <p>{item.nanny_first_name} {item.nanny_last_name}</p>
+                                  <p className="text-sm text-muted-foreground">{item.nanny_email}</p>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex flex-col gap-2 min-w-[200px]">
+                              {item.status === 'pending' && (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    variant="default"
+                                    className="bg-green-600 hover:bg-green-700"
+                                    onClick={() => setSelectedReview(item)}
+                                  >
+                                    <CheckCircle className="h-4 w-4 mr-2" />
+                                    Respond & Resolve
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-red-600 border-red-200 hover:bg-red-50"
+                                    onClick={() => updateReviewStatus(item.id, 'dismissed')}
+                                  >
+                                    <X className="h-4 w-4 mr-2" />
+                                    Dismiss
+                                  </Button>
+                                </>
+                              )}
+                              {item.status === 'resolved' && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                                  onClick={() => setSelectedReview(item)}
+                                >
+                                  <Edit className="h-4 w-4 mr-2" />
+                                  Update Response
+                                </Button>
+                              )}
+                              {item.status !== 'archived' && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-gray-600 hover:bg-gray-100"
+                                  onClick={() => archiveReview(item.id)}
+                                >
+                                  <Archive className="h-4 w-4 mr-2" />
+                                  Archive
+                                </Button>
+                              )}
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  const subject = `Regarding your ${isReview ? 'review' : 'complaint'} about ${item.nanny_first_name}`;
+                                  const body = `Dear ${item.client_first_name},\n\nRegarding your ${isReview ? 'review' : 'complaint'} about ${item.nanny_first_name} ${item.nanny_last_name}:\n\n`;
+                                  window.location.href = `mailto:${item.client_email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+                                }}
+                              >
+                                <Mail className="h-4 w-4 mr-2" />
+                                Email Client
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  const subject = `Regarding client ${isReview ? 'review' : 'complaint'}`;
+                                  const body = `Dear ${item.nanny_first_name},\n\nRegarding a ${isReview ? 'review' : 'complaint'} from ${item.client_first_name} ${item.client_last_name}:\n\n`;
+                                  window.location.href = `mailto:${item.nanny_email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+                                }}
+                              >
+                                <Mail className="h-4 w-4 mr-2" />
+                                Email Nanny
+                              </Button>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Existing Academy Tab - unchanged */}
         <TabsContent value="academy" className="space-y-6">
           <Card>
             <CardHeader>
@@ -1304,6 +1933,7 @@ export default function AdminPanel() {
           </Card>
         </TabsContent>
 
+        {/* Existing Payments Tab - unchanged */}
         <TabsContent value="payments" className="space-y-6">
           <Card>
             <CardHeader>
@@ -1386,6 +2016,104 @@ export default function AdminPanel() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Dialog for responding to reviews/complaints */}
+      <Dialog open={!!selectedReview} onOpenChange={() => {
+        setSelectedReview(null);
+        setAdminResponse('');
+      }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedReview?.rating !== null ? 'Respond to Review' : 'Respond to Complaint'}
+            </DialogTitle>
+            <DialogDescription>
+              Add your response and update the status. Your response will be emailed to both parties.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedReview && (
+            <div className="space-y-4 py-4">
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <p className="font-medium">
+                      {selectedReview.rating !== null ? 'Review' : 'Complaint'} from {selectedReview.client_first_name} {selectedReview.client_last_name}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      About {selectedReview.nanny_first_name} {selectedReview.nanny_last_name}
+                    </p>
+                  </div>
+                  {selectedReview.rating && (
+                    <div className="flex items-center gap-1">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <Star
+                          key={star}
+                          className={`h-4 w-4 ${
+                            star <= selectedReview.rating!
+                              ? 'fill-yellow-400 text-yellow-400'
+                              : 'text-gray-300'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+                
+                {selectedReview.complaint_text && (
+                  <div className="mt-3">
+                    <p className="text-sm font-medium text-red-700 mb-1">Complaint:</p>
+                    <p className="text-sm text-red-600">{selectedReview.complaint_text}</p>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <Label htmlFor="admin-response" className="mb-2 block">
+                  Your Response (will be sent via email)
+                </Label>
+                <Textarea
+                  id="admin-response"
+                  placeholder="Enter your response here. This will be sent to both the client and the nanny/cleaner..."
+                  value={adminResponse}
+                  onChange={(e) => setAdminResponse(e.target.value)}
+                  rows={6}
+                  className="w-full"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <Button
+                  onClick={() => updateReviewStatus(selectedReview.id, 'resolved', adminResponse)}
+                  disabled={updatingReview || !adminResponse.trim()}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  {updatingReview ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                      Mark as Resolved
+                    </>
+                  )}
+                </Button>
+                <Button
+                  onClick={() => updateReviewStatus(selectedReview.id, 'dismissed', adminResponse)}
+                  disabled={updatingReview}
+                  variant="outline"
+                  className="text-red-600 border-red-200 hover:bg-red-50"
+                >
+                  <X className="h-4 w-4 mr-2" />
+                  Dismiss
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

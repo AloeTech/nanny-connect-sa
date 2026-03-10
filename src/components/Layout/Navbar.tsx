@@ -48,10 +48,10 @@ export default function Navbar() {
             <Button variant="ghost">Find a Nanny</Button>
           </Link>
           <Link 
-            to="/register-nanny" 
+            to="/find-cleaner" 
             onClick={() => mobile && setMobileMenuOpen(false)}
           >
-            <Button variant="ghost">Become a Nanny</Button>
+            <Button variant="ghost">Find a Cleaner</Button>
           </Link>
           <Link 
             to="/about" 

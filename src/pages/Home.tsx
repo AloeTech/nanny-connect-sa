@@ -341,7 +341,7 @@ export default function Home() {
               </CardHeader>
               <CardContent>
                 <p className="text-muted-foreground">
-                  Criminal background check upload option available, proof of residence mandatory, CV and referalls checked, proff of identity mandatory
+                  Criminal background check upload option available, proof of residence mandatory, CV and referalls checked, proof of identity mandatory
                 </p>
               </CardContent>
             </Card>

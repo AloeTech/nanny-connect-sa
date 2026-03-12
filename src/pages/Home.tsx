@@ -154,7 +154,7 @@ export default function Home() {
     "Always meet in public places for initial interviews",
     "Bring a trusted friend or family member to meetings",
     "Verify all documents and references independently",
-    "Ensure minimum wage compliance (R25/hour minimum)",
+    "Ensure minimum wage compliance",
     "Trust your instincts - if something feels wrong, it probably is",
     "Report any suspicious behavior immediately"
   ];
@@ -204,7 +204,7 @@ export default function Home() {
                 </Button>
               </Link>
               <Link to="/register-nanny">
-                <Button size="lg" variant="ghost" className="text-lg px-8 text-white hover:bg-white/10">
+                <Button size="lg" variant="outline" className="text-lg px-8 bg-white/10 border-white/20 text-white hover:bg-white/20">
                   Become a Nanny/Cleaner
                 </Button>
               </Link>
@@ -341,7 +341,7 @@ export default function Home() {
               </CardHeader>
               <CardContent>
                 <p className="text-muted-foreground">
-                  Criminal background verification, credit checks and proof of residence for all nannies and cleaners.
+                  Criminal background check upload option available, proof of residence mandatory, CV and referalls checked, proff of identity mandatory
                 </p>
               </CardContent>
             </Card>

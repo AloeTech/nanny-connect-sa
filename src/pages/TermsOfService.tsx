@@ -36,10 +36,23 @@ export default function TermsOfService() {
             </CardContent>
           </Card>
 
+          {/* Use of Website */}
+          <Card className="border-primary/20 shadow-lg">
+            <CardHeader>
+              <CardTitle className="text-2xl text-primary">2. Use of Website</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground leading-relaxed">
+                You agree to use the Nanny Placements South Africa website only for lawful purposes and in accordance with these terms. 
+                Any unauthorized use of the website or its services may result in termination of your access.
+              </p>
+            </CardContent>
+          </Card>
+
           {/* Service Description */}
           <Card className="border-primary/20 shadow-lg">
             <CardHeader>
-              <CardTitle className="text-2xl text-primary">2. Service Description</CardTitle>
+              <CardTitle className="text-2xl text-primary">3. Service Description</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-muted-foreground leading-relaxed">
@@ -55,10 +68,24 @@ export default function TermsOfService() {
             </CardContent>
           </Card>
 
+          {/* Nanny/Cleaner Sourcing */}
+          <Card className="border-primary/20 shadow-lg">
+            <CardHeader>
+              <CardTitle className="text-2xl text-primary">4. Nanny/Cleaner Sourcing</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground leading-relaxed">
+                You understand that Nanny Placements South Africa is a platform connecting families with nannies/cleaners. 
+                We do not employ or supervise nannies/cleaners listed on our platform. You are responsible for conducting 
+                your own checks and ensuring suitability for your specific requirements.
+              </p>
+            </CardContent>
+          </Card>
+
           {/* User Responsibilities */}
           <Card className="border-primary/20 shadow-lg">
             <CardHeader>
-              <CardTitle className="text-2xl text-primary">3. User Responsibilities</CardTitle>
+              <CardTitle className="text-2xl text-primary">5. User Responsibilities</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
               <div>
@@ -84,10 +111,23 @@ export default function TermsOfService() {
             </CardContent>
           </Card>
 
+          {/* Compliance with Laws */}
+          <Card className="border-primary/20 shadow-lg">
+            <CardHeader>
+              <CardTitle className="text-2xl text-primary">6. Compliance with Laws</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground leading-relaxed">
+                You agree to comply with all applicable laws and regulations in using our services, including but not limited to 
+                employment laws, data protection regulations, and any other relevant legislation in South Africa.
+              </p>
+            </CardContent>
+          </Card>
+
           {/* Payment Terms */}
           <Card className="border-primary/20 shadow-lg">
             <CardHeader>
-              <CardTitle className="text-2xl text-primary">4. Payment Terms</CardTitle>
+              <CardTitle className="text-2xl text-primary">7. Payment Terms</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="bg-primary/5 p-4 rounded-lg">
@@ -111,7 +151,7 @@ export default function TermsOfService() {
           {/* Privacy and Data Protection */}
           <Card className="border-primary/20 shadow-lg">
             <CardHeader>
-              <CardTitle className="text-2xl text-primary">5. Privacy and Data Protection</CardTitle>
+              <CardTitle className="text-2xl text-primary">8. Privacy and Data Protection</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-muted-foreground leading-relaxed">
@@ -127,19 +167,32 @@ export default function TermsOfService() {
             </CardContent>
           </Card>
 
+          {/* Disclaimer of Warranties */}
+          <Card className="border-primary/20 shadow-lg">
+            <CardHeader>
+              <CardTitle className="text-2xl text-primary">9. Disclaimer of Warranties</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground leading-relaxed">
+                This website is provided "as is" without warranties of any kind, either express or implied. 
+                Nanny Placements South Africa disclaims all liability for any damages arising from your use of this website.
+              </p>
+            </CardContent>
+          </Card>
+
           {/* Liability Limitations */}
           <Card className="border-amber-200 bg-amber-50 shadow-lg">
             <CardHeader>
               <CardTitle className="text-2xl text-amber-800 flex items-center gap-2">
                 <AlertTriangle className="w-6 h-6" />
-                6. Liability Limitations
+                10. Limitation of Liability
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="bg-amber-100 p-4 rounded-lg border border-amber-200">
                 <p className="text-amber-800 font-medium mb-2">Important Notice:</p>
                 <p className="text-amber-700 text-sm">
-                  Nanny Placements SA is a matching service only. We are not liable for the actions, 
+                  Nanny Placements South Africa is a matching service only. We are not liable for the actions, 
                   conduct, or performance of nannies, cleaners or families using our platform.
                 </p>
               </div>
@@ -148,15 +201,29 @@ export default function TermsOfService() {
                 <li>We recommend independent verification of all information</li>
                 <li>Employment contracts are between families and nannies directly</li>
                 <li>Platform liability is limited to the matching fee paid</li>
-                
+                <li>Nanny Placements South Africa shall not be liable for any indirect, incidental, special, or consequential damages arising out of your use of this website</li>
               </ul>
+            </CardContent>
+          </Card>
+
+          {/* Indemnification */}
+          <Card className="border-primary/20 shadow-lg">
+            <CardHeader>
+              <CardTitle className="text-2xl text-primary">11. Indemnification</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground leading-relaxed">
+                You agree to indemnify, defend, and hold harmless Nanny Placements South Africa, its officers, directors, 
+                employees, and affiliates from any claims, damages, or expenses arising out of your use of this website 
+                or breach of these terms.
+              </p>
             </CardContent>
           </Card>
 
           {/* Termination */}
           <Card className="border-primary/20 shadow-lg">
             <CardHeader>
-              <CardTitle className="text-2xl text-primary">7. Account Termination</CardTitle>
+              <CardTitle className="text-2xl text-primary">12. Account Termination</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-muted-foreground leading-relaxed">
@@ -175,7 +242,7 @@ export default function TermsOfService() {
           {/* Governing Law */}
           <Card className="border-primary/20 shadow-lg">
             <CardHeader>
-              <CardTitle className="text-2xl text-primary">8. Governing Law</CardTitle>
+              <CardTitle className="text-2xl text-primary">13. Governing Law</CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-muted-foreground leading-relaxed">
@@ -189,7 +256,7 @@ export default function TermsOfService() {
           {/* Changes to Terms */}
           <Card className="border-primary/20 shadow-lg">
             <CardHeader>
-              <CardTitle className="text-2xl text-primary">9. Changes to Terms</CardTitle>
+              <CardTitle className="text-2xl text-primary">14. Changes to Terms</CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-muted-foreground leading-relaxed">
@@ -213,7 +280,6 @@ export default function TermsOfService() {
               </p>
               <div className="space-y-2 text-muted-foreground">
                 <p><strong>Email:</strong> admin@nannyplacementssouthafrica.co.za</p>
-                
                 <p><strong>Address:</strong> Centurion, South Africa</p>
               </div>
             </CardContent>

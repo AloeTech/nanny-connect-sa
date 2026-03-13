@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Heart, MapPin, CheckCircle, X, Eye, CreditCard, Loader2, Star, Sparkles, ShieldCheck } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
@@ -74,6 +75,140 @@ interface Interest {
   nanny_last_name: string | null;
   nanny_email: string | null;
 }
+
+interface TermsAcceptanceDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onAccept: () => void;
+  onCancel: () => void;
+  loading?: boolean;
+  cleaningType: string;
+  amount: number;
+}
+
+// Terms Acceptance Dialog Component
+const TermsAcceptanceDialog: React.FC<TermsAcceptanceDialogProps> = ({
+  open,
+  onOpenChange,
+  onAccept,
+  onCancel,
+  loading = false,
+  cleaningType,
+  amount
+}) => {
+  const [hasAgreed, setHasAgreed] = useState(false);
+  const selectedCleaningTypeObj = cleaningTypes.find(t => t.value === cleaningType);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="text-2xl flex items-center gap-2">
+            <ShieldCheck className="h-6 w-6 text-primary" />
+            Terms of Service Agreement
+          </DialogTitle>
+          <DialogDescription>
+            Please review and accept our terms before proceeding with payment
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-6 py-4">
+          <div className="bg-primary/5 p-4 rounded-lg">
+            <p className="text-sm font-medium mb-2">Payment Summary:</p>
+            <div className="flex justify-between items-center">
+              <span>{selectedCleaningTypeObj?.label} Service</span>
+              <span className="font-bold text-primary">R{amount}</span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              {selectedCleaningTypeObj?.description}
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            <p className="text-sm font-medium">By clicking "I Agree" below, you acknowledge that you have read, understood, and agree to be bound by the following terms and conditions:</p>
+
+            <div className="space-y-3">
+              <div className="border-l-4 border-primary pl-4 py-2">
+                <h4 className="font-semibold text-sm mb-1">1. Use of Website</h4>
+                <p className="text-sm text-muted-foreground">You agree to use the nannyplacementssouthafrica.co.za website only for lawful purposes and in accordance with these terms.</p>
+              </div>
+
+              <div className="border-l-4 border-primary pl-4 py-2">
+                <h4 className="font-semibold text-sm mb-1">2. Indemnification</h4>
+                <p className="text-sm text-muted-foreground">You agree to indemnify, defend, and hold harmless Nanny Placements South Africa, its officers, directors, employees, and affiliates from any claims, damages, or expenses arising out of your use of this website or breach of these terms.</p>
+              </div>
+
+              <div className="border-l-4 border-primary pl-4 py-2">
+                <h4 className="font-semibold text-sm mb-1">3. Disclaimer of Warranties</h4>
+                <p className="text-sm text-muted-foreground">This website is provided "as is" without warranties of any kind. Nanny Placements South Africa disclaims all liability for any damages arising from your use of this website.</p>
+              </div>
+
+              <div className="border-l-4 border-primary pl-4 py-2">
+                <h4 className="font-semibold text-sm mb-1">4. Limitation of Liability</h4>
+                <p className="text-sm text-muted-foreground">Nanny Placements South Africa shall not be liable for any indirect, incidental, special, or consequential damages arising out of your use of this website.</p>
+              </div>
+
+              <div className="border-l-4 border-primary pl-4 py-2">
+                <h4 className="font-semibold text-sm mb-1">5. Nanny/Cleaner Sourcing</h4>
+                <p className="text-sm text-muted-foreground">You understand that Nanny Placements South Africa is a platform connecting families with nannies/cleaners. We do not employ or supervise nannies/cleaners listed on our platform. You are responsible for conducting your own checks and ensuring suitability.</p>
+              </div>
+
+              <div className="border-l-4 border-primary pl-4 py-2">
+                <h4 className="font-semibold text-sm mb-1">6. Compliance with Laws</h4>
+                <p className="text-sm text-muted-foreground">You agree to comply with all applicable laws and regulations in using our services.</p>
+              </div>
+            </div>
+
+            <div className="flex items-start space-x-2 pt-4">
+              <Checkbox
+                id="terms"
+                checked={hasAgreed}
+                onCheckedChange={(checked) => setHasAgreed(checked as boolean)}
+                className="mt-1"
+              />
+              <Label htmlFor="terms" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                I have read and agree to the terms and conditions above
+              </Label>
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              setHasAgreed(false);
+              onCancel();
+            }}
+            disabled={loading}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={() => {
+              if (hasAgreed) {
+                onAccept();
+              }
+            }}
+            disabled={!hasAgreed || loading}
+          >
+            {loading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Processing...
+              </>
+            ) : (
+              'I Agree & Proceed to Payment'
+            )}
+          </Button>
+        </DialogFooter>
+        <p className="text-xs text-center text-muted-foreground mt-2">
+          By clicking "I Agree & Proceed to Payment", you confirm you have read and agree to these terms.
+        </p>
+      </DialogContent>
+    </Dialog>
+  );
+};
 
 // Cleaning type options with fees
 const cleaningTypes = [
@@ -286,6 +421,11 @@ export default function FindCleaner() {
   const [review, setReview] = useState('');
   const [submittingReview, setSubmittingReview] = useState(false);
   const [refreshCount, setRefreshCount] = useState(0);
+  const [showTermsDialog, setShowTermsDialog] = useState(false);
+  const [pendingPaymentDetails, setPendingPaymentDetails] = useState<{
+    cleaner: Cleaner;
+    interestId: string;
+  } | null>(null);
   const hasProcessedRedirect = useRef(false);
 
   const hasRole = userRole === 'client';
@@ -841,15 +981,6 @@ export default function FindCleaner() {
   };
 
   const handlePayment = async (cleaner: Cleaner, interestId: string) => {
-    if (!window.FlutterwaveCheckout) {
-      toast({
-        title: "Payment Error",
-        description: "Payment system is not available. Please try again later.",
-        variant: "destructive"
-      });
-      return;
-    }
-
     if (!cleaningType) {
       toast({
         title: "Selection Required",
@@ -859,8 +990,25 @@ export default function FindCleaner() {
       return;
     }
 
+    // Store payment details and show terms dialog
+    setPendingPaymentDetails({ cleaner, interestId });
+    setShowTermsDialog(true);
+  };
+
+  const handleTermsAccepted = async () => {
+    if (!pendingPaymentDetails || !window.FlutterwaveCheckout) {
+      toast({
+        title: "Payment Error",
+        description: "Payment system is not available. Please try again later.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const { cleaner, interestId } = pendingPaymentDetails;
+    setShowTermsDialog(false);
     setProcessingPayment(cleaner.id);
-        
+    
     try {
       const { data: clientData } = await supabase
         .from('clients')
@@ -875,6 +1023,7 @@ export default function FindCleaner() {
           variant: "destructive"
         });
         setProcessingPayment(null);
+        setPendingPaymentDetails(null);
         return;
       }
 
@@ -893,6 +1042,7 @@ export default function FindCleaner() {
           variant: "destructive"
         });
         setProcessingPayment(null);
+        setPendingPaymentDetails(null);
         return;
       }
 
@@ -948,10 +1098,12 @@ export default function FindCleaner() {
             });
           }
           setProcessingPayment(null);
+          setPendingPaymentDetails(null);
         },
         onclose: () => {
           console.log('Cleaner payment modal closed');
           setProcessingPayment(null);
+          setPendingPaymentDetails(null);
         }
       });
     } catch (error) {
@@ -962,7 +1114,17 @@ export default function FindCleaner() {
         variant: "destructive"
       });
       setProcessingPayment(null);
+      setPendingPaymentDetails(null);
     }
+  };
+
+  const handleTermsCancel = () => {
+    setShowTermsDialog(false);
+    setPendingPaymentDetails(null);
+    toast({
+      title: "Payment Cancelled",
+      description: "You have cancelled the payment process.",
+    });
   };
 
   const submitReview = async () => {
@@ -1073,6 +1235,17 @@ export default function FindCleaner() {
 
   return (
     <div className="container mx-auto px-4 py-8">
+      {/* Terms Acceptance Dialog */}
+      <TermsAcceptanceDialog
+        open={showTermsDialog}
+        onOpenChange={setShowTermsDialog}
+        onAccept={handleTermsAccepted}
+        onCancel={handleTermsCancel}
+        loading={processingPayment !== null}
+        cleaningType={cleaningType}
+        amount={cleaningTypes.find(t => t.value === cleaningType)?.fee || 0}
+      />
+
       <div className="mb-8">
         <h1 className="text-3xl font-bold mb-2">Find a Professional Cleaner</h1>
         <p className="text-muted-foreground">

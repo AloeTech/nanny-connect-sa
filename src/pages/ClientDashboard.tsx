@@ -6,10 +6,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { Heart, CreditCard, Calendar, User, MapPin, Clock, DollarSign, Eye, Edit, ArrowRight } from 'lucide-react';
+import { 
+  Heart, CreditCard, Calendar, User, MapPin, Clock, DollarSign, Eye, Edit, ArrowRight,
+  AlertTriangle, CheckCircle, Briefcase, Home, Phone, Mail, Sparkles
+} from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 
 interface ClientProfile {
   id: string;
@@ -67,6 +72,32 @@ interface Payment {
   transaction_id: string | null;
 }
 
+// Helper function to get missing client requirements
+const getMissingClientRequirements = (userProfile: UserProfile | null, clientProfile: ClientProfile | null): string[] => {
+  const missing: string[] = [];
+  
+  if (!userProfile?.first_name) missing.push('First Name');
+  if (!userProfile?.last_name) missing.push('Last Name');
+  if (!userProfile?.phone) missing.push('Phone Number');
+  if (!userProfile?.city) missing.push('City');
+  if (!clientProfile?.preferred_employment_type) missing.push('Preferred Employment Type');
+  if (!clientProfile?.preferred_experience_type) missing.push('Preferred Experience Type (Nanny/Cleaning/Both)');
+  if (!clientProfile?.preferred_accommodation_type) missing.push('Preferred Accommodation Type');
+  
+  return missing;
+};
+
+// Helper function to get missing preferences for Auto Match
+const getMissingPreferences = (clientProfile: ClientProfile | null): string[] => {
+  const missing: string[] = [];
+  
+  if (!clientProfile?.preferred_employment_type) missing.push('Employment Type');
+  if (!clientProfile?.preferred_experience_type) missing.push('Experience Type');
+  if (!clientProfile?.preferred_accommodation_type) missing.push('Accommodation Type');
+  
+  return missing;
+};
+
 export default function ClientDashboard() {
   const { user, userRole } = useAuth();
   const { toast } = useToast();
@@ -76,6 +107,7 @@ export default function ClientDashboard() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
+  const [isEditingPreferences, setIsEditingPreferences] = useState(false);
   const [editedUserProfile, setEditedUserProfile] = useState<UserProfile | null>(null);
   const [editedClientProfile, setEditedClientProfile] = useState<ClientProfile | null>(null);
 
@@ -199,6 +231,7 @@ export default function ClientDashboard() {
       }
 
       setIsEditing(false);
+      setIsEditingPreferences(false);
       toast({ title: "Success", description: "Profile updated successfully" });
     } catch (error: any) {
       toast({ title: "Error", description: error.message || "Failed to update profile", variant: "destructive" });
@@ -241,12 +274,104 @@ export default function ClientDashboard() {
     );
   }
 
+  const missingRequirements = getMissingClientRequirements(userProfile, clientProfile);
+  const missingPreferences = getMissingPreferences(clientProfile);
+  const isProfileComplete = missingRequirements.length === 0;
+  const hasPreferences = missingPreferences.length === 0;
+  const canUseAutoMatch = isProfileComplete && hasPreferences;
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-8">
         <h1 className="text-3xl font-bold">Client Dashboard</h1>
         <p className="text-muted-foreground">Manage your nanny search and bookings</p>
       </div>
+
+      {/* ENHANCED INCOMPLETE PROFILE BANNER */}
+      {!isProfileComplete && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-yellow-800 mb-2">
+                Complete your profile to find the best nanny matches!
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {missingRequirements.map((item, index) => (
+                  <div key={index} className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-yellow-600"></div>
+                    <span className="text-sm text-yellow-700">{item}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 pt-2 border-t border-yellow-200">
+                <p className="text-xs text-yellow-600">
+                  <Button 
+                    variant="link" 
+                    className="p-0 h-auto text-yellow-700 font-medium underline"
+                    onClick={() => setIsEditing(true)}
+                  >
+                    Click here to complete your profile →
+                  </Button>
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AUTO MATCH READINESS BANNER */}
+      {isProfileComplete && !hasPreferences && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+          <div className="flex items-start gap-3">
+            <Sparkles className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-blue-800 mb-2">
+                Set your preferences to use Auto Match!
+              </p>
+              <p className="text-sm text-blue-700 mb-2">
+                Tell us what kind of nanny/cleaner you're looking for:
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {missingPreferences.map((item, index) => (
+                  <div key={index} className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-600"></div>
+                    <span className="text-sm text-blue-700">{item}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 pt-2 border-t border-blue-200">
+                <p className="text-xs text-blue-600">
+                  <Button 
+                    variant="link" 
+                    className="p-0 h-auto text-blue-700 font-medium underline"
+                    onClick={() => setIsEditingPreferences(true)}
+                  >
+                    Set your preferences now →
+                  </Button>
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* READY FOR AUTO MATCH BANNER */}
+      {canUseAutoMatch && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+          <div className="flex items-start gap-3">
+            <CheckCircle className="h-5 w-5 text-green-600 mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-green-800">
+                ✓ Your profile is complete! You can now use Auto Match.
+              </p>
+              <p className="text-sm text-green-700 mt-1">
+                Go to <Link to="/find-nanny" className="font-medium underline">Find Nanny</Link> and click the "Auto Match" button to find nannies that match your preferences.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
@@ -438,12 +563,21 @@ export default function ClientDashboard() {
         </div>
 
         <div className="space-y-6">
+          {/* Profile Card */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <User className="h-5 w-5" />
                 Your Profile
               </CardTitle>
+              {!isProfileComplete && (
+                <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-200">
+                  Incomplete
+                </Badge>
+              )}
+              {isProfileComplete && (
+                <Badge className="bg-green-500">Complete</Badge>
+              )}
             </CardHeader>
             <CardContent>
               {isEditing ? (
@@ -500,18 +634,18 @@ export default function ClientDashboard() {
                 <div className="space-y-4">
                   <div>
                     <p className="font-semibold text-lg">{userProfile?.first_name} {userProfile?.last_name}</p>
-                    <p className="text-sm text-muted-foreground">{userProfile?.email}</p>
+                    <p className="text-sm text-muted-foreground flex items-center gap-1"><Mail className="h-3 w-3" /> {userProfile?.email}</p>
                   </div>
                   
                   {userProfile?.phone && (
                     <div>
-                      <p className="text-sm font-medium">Phone</p>
+                      <p className="text-sm font-medium flex items-center gap-1"><Phone className="h-3 w-3" /> Phone</p>
                       <p className="text-sm text-muted-foreground">{userProfile.phone}</p>
                     </div>
                   )}
                   
                   <div>
-                    <p className="text-sm font-medium">Location</p>
+                    <p className="text-sm font-medium flex items-center gap-1"><MapPin className="h-3 w-3" /> Location</p>
                     <p className="text-sm text-muted-foreground">
                       {userProfile?.suburb ? `${userProfile.suburb}, ` : ''}{userProfile?.city || 'Not specified'}
                     </p>
@@ -519,6 +653,125 @@ export default function ClientDashboard() {
                   
                   <Button variant="outline" className="w-full" onClick={() => setIsEditing(true)}>
                     <Edit className="h-4 w-4 mr-2" /> Edit Profile
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Preferences Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Briefcase className="h-5 w-5" />
+                Your Preferences
+              </CardTitle>
+              <CardDescription>Used for Auto Match feature</CardDescription>
+              {!hasPreferences && (
+                <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-200">
+                  Set Preferences
+                </Badge>
+              )}
+              {hasPreferences && (
+                <Badge className="bg-green-500">Set</Badge>
+              )}
+            </CardHeader>
+            <CardContent>
+              {isEditingPreferences ? (
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="preferred_employment_type">Preferred Employment Type *</Label>
+                    <Select 
+                      value={editedClientProfile?.preferred_employment_type || ''} 
+                      onValueChange={(value) => setEditedClientProfile(prev => ({ ...prev!, preferred_employment_type: value as any }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select employment type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="full_time">Full Time</SelectItem>
+                        <SelectItem value="part_time">Part Time</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="preferred_experience_type">Preferred Experience Type *</Label>
+                    <Select 
+                      value={editedClientProfile?.preferred_experience_type || ''} 
+                      onValueChange={(value) => setEditedClientProfile(prev => ({ ...prev!, preferred_experience_type: value as any }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select experience type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="nanny">Nanny Only</SelectItem>
+                        <SelectItem value="cleaning">Cleaning Only</SelectItem>
+                        <SelectItem value="both">Both Nanny & Cleaning</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="preferred_accommodation_type">Preferred Accommodation Type *</Label>
+                    <Select 
+                      value={editedClientProfile?.preferred_accommodation_type || ''} 
+                      onValueChange={(value) => setEditedClientProfile(prev => ({ ...prev!, preferred_accommodation_type: value as any }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select accommodation type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="live_in">Live In</SelectItem>
+                        <SelectItem value="stay_out">Stay Out</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="description">Family Description (Optional)</Label>
+                    <Textarea 
+                      id="description"
+                      value={editedClientProfile?.description || ''} 
+                      onChange={(e) => setEditedClientProfile(prev => ({ ...prev!, description: e.target.value }))} 
+                      placeholder="Tell nannies about your family, children, and what you're looking for..."
+                      rows={3}
+                    />
+                  </div>
+
+                  <div className="flex gap-2 pt-2">
+                    <Button onClick={handleSaveProfile}>Save Preferences</Button>
+                    <Button variant="outline" onClick={() => setIsEditingPreferences(false)}>Cancel</Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-sm font-medium">Employment Type</p>
+                    <p className="text-sm text-muted-foreground capitalize">
+                      {clientProfile?.preferred_employment_type?.replace('_', ' ') || 'Not set'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">Experience Type</p>
+                    <p className="text-sm text-muted-foreground capitalize">
+                      {clientProfile?.preferred_experience_type || 'Not set'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">Accommodation Type</p>
+                    <p className="text-sm text-muted-foreground capitalize">
+                      {clientProfile?.preferred_accommodation_type === 'stay_out' ? 'Stay Out' : clientProfile?.preferred_accommodation_type || 'Not set'}
+                    </p>
+                  </div>
+                  {clientProfile?.description && (
+                    <div>
+                      <p className="text-sm font-medium">About Your Family</p>
+                      <p className="text-sm text-muted-foreground">{clientProfile.description}</p>
+                    </div>
+                  )}
+                  <Button variant="outline" className="w-full" onClick={() => setIsEditingPreferences(true)}>
+                    <Edit className="h-4 w-4 mr-2" /> Edit Preferences
                   </Button>
                 </div>
               )}
@@ -537,6 +790,15 @@ export default function ClientDashboard() {
                   Find More Nannies
                 </Button>
               </Link>
+              
+              {canUseAutoMatch && (
+                <Link to="/find-nanny">
+                  <Button variant="default" className="w-full justify-start bg-purple-600 hover:bg-purple-700">
+                    <Sparkles className="h-4 w-4 mr-2" />
+                    Try Auto Match
+                  </Button>
+                </Link>
+              )}
               
               {interests.filter(i => i.nanny_response === 'approved' && i.payment_status !== 'completed').length > 0 && (
                 <Link to="/find-nanny">

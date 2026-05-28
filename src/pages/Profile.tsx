@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
-import { User, MapPin, Phone, Mail, Upload, Save, Eye } from 'lucide-react';
+import { User, MapPin, Phone, Mail, Upload, Save, Eye, FileText } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SOUTH_AFRICAN_CITIES } from '@/data/southAfricanCities';
 
@@ -51,6 +51,7 @@ interface NannyProfile {
   profile_approved: boolean;
   created_at: string;
   updated_at: string;
+  cv_url: string;
 }
 
 interface ClientProfile {
@@ -85,7 +86,7 @@ export default function Profile() {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [nannyProfile, setNannyProfile] = useState<NannyProfile | null>(null);
   const [clientProfile, setClientProfile] = useState<ClientProfile | null>(null);
-  const [uploading, setUploading] = useState({ proof: false, video: false, criminal: false, credit: false });
+  const [uploading, setUploading] = useState({ proof: false, video: false, criminal: false, credit: false, cv: false });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -127,7 +128,8 @@ export default function Profile() {
             criminal_check_status: nanny.criminal_check_status || 'pending',
             credit_check_status: nanny.credit_check_status || 'pending',
             academy_completed: nanny.academy_completed || false,
-            profile_approved: nanny.profile_approved || false
+            profile_approved: nanny.profile_approved || false,
+            cv_url: nanny.cv_url || ''
           });
         }
       } else if (userRole === 'client') {
@@ -324,33 +326,43 @@ export default function Profile() {
     }
   };
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>, fileType: 'proof_of_residence' | 'criminal_check' | 'credit_check') => {
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>, fileType: 'proof_of_residence' | 'criminal_check' | 'credit_check' | 'cv') => {
     const file = event.target.files?.[0];
     if (!file || !nannyProfile) return;
 
-    // Validate file type for documents
-    const validTypes = ['application/pdf', 'image/jpeg', 'image/png'];
+    // Validate file type
+    let validTypes = ['application/pdf', 'image/jpeg', 'image/png'];
+    let maxSize = 10 * 1024 * 1024; // 10MB
+    
+    if (fileType === 'cv') {
+      validTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+      maxSize = 10 * 1024 * 1024; // 10MB for CV as well
+    }
+    
     if (!validTypes.includes(file.type)) {
       toast({
         title: "Invalid file type",
-        description: "Please upload a PDF, JPEG, or PNG file.",
+        description: fileType === 'cv' 
+          ? "Please upload a PDF or Word document (.pdf, .doc, .docx)."
+          : "Please upload a PDF, JPEG, or PNG file.",
         variant: "destructive"
       });
       return;
     }
 
-    // Check file size (max 10MB)
-    if (file.size > 10 * 1024 * 1024) {
+    // Check file size
+    if (file.size > maxSize) {
       toast({
         title: "File too large",
-        description: "Please upload a file smaller than 10MB.",
+        description: `Please upload a file smaller than ${maxSize / (1024 * 1024)}MB.`,
         variant: "destructive"
       });
       return;
     }
 
     const uploadingKey = fileType === 'proof_of_residence' ? 'proof' : 
-                        fileType === 'criminal_check' ? 'criminal' : 'credit';
+                        fileType === 'criminal_check' ? 'criminal' : 
+                        fileType === 'credit_check' ? 'credit' : 'cv';
     
     setUploading(prev => ({ ...prev, [uploadingKey]: true }));
     
@@ -358,8 +370,21 @@ export default function Profile() {
       const fileExt = file.name.split('.').pop();
       const fileName = `${user?.id}/${fileType}-${Date.now()}.${fileExt}`;
       
-      const bucket = fileType === 'proof_of_residence' ? 'proof-of-residence' :
-                    fileType === 'criminal_check' ? 'criminal-checks' : 'credit-checks';
+      let bucket = '';
+      switch (fileType) {
+        case 'proof_of_residence':
+          bucket = 'proof-of-residence';
+          break;
+        case 'criminal_check':
+          bucket = 'criminal-checks';
+          break;
+        case 'credit_check':
+          bucket = 'credit-checks';
+          break;
+        case 'cv':
+          bucket = 'cv-documents';
+          break;
+      }
 
       const { error: uploadError } = await supabase.storage
         .from(bucket)
@@ -375,11 +400,16 @@ export default function Profile() {
         .getPublicUrl(fileName);
       const publicUrl = data.publicUrl;
 
-      const updateData: any = { [fileType]: publicUrl };
+      const updateData: any = { 
+        [fileType === 'cv' ? 'cv_url' : `${fileType}_url`]: publicUrl 
+      };
+      
       if (fileType === 'criminal_check') {
         updateData.criminal_check_status = 'pending';
       } else if (fileType === 'credit_check') {
         updateData.credit_check_status = 'pending';
+      } else if (fileType === 'proof_of_residence') {
+        updateData.proof_of_residence_status = 'pending';
       }
 
       const { error: updateError } = await supabase
@@ -435,7 +465,8 @@ export default function Profile() {
         academy_completed: false,
         profile_approved: false,
         created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
+        cv_url: ''
       });
     } else if (userRole === 'client' && !clientProfile) {
       setClientProfile({
@@ -641,7 +672,6 @@ export default function Profile() {
                                 size="sm"
                                 variant="outline"
                                 onClick={() => {
-                                  // Remove video
                                   setNannyProfile(prev => prev ? {...prev, interview_video_url: ''} : null);
                                   toast({
                                     title: "Video removed",
@@ -745,6 +775,43 @@ export default function Profile() {
                           <p className="text-sm text-green-600">✓ Credit check uploaded</p>
                           <a href={nannyProfile.credit_check_url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline">
                             View Document
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* CV Upload Section - NEW */}
+                  <div>
+                    <Label htmlFor="cv">Curriculum Vitae (CV) / Resume</Label>
+                    <div className="border-2 border-dashed border-border rounded-lg p-4 text-center">
+                      <input
+                        type="file"
+                        id="cv"
+                        accept=".pdf,.doc,.docx"
+                        onChange={(e) => handleFileUpload(e, 'cv')}
+                        className="hidden"
+                        disabled={uploading.cv}
+                      />
+                      <label htmlFor="cv" className="cursor-pointer">
+                        <FileText className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                        <p className="text-sm text-muted-foreground mb-1">
+                          {uploading.cv ? 'Uploading...' : 'Click to upload your CV'}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          PDF, DOC, DOCX accepted, up to 10MB
+                        </p>
+                      </label>
+                      {nannyProfile.cv_url && (
+                        <div className="mt-2">
+                          <p className="text-sm text-green-600">✓ CV uploaded</p>
+                          <a 
+                            href={nannyProfile.cv_url} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="text-sm text-blue-600 hover:underline"
+                          >
+                            View CV
                           </a>
                         </div>
                       )}

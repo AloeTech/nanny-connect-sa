@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { X, Upload } from "lucide-react";
+import { X, Upload, FileText } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { SOUTH_AFRICAN_CITIES } from "@/data/southAfricanCities";
@@ -18,7 +18,7 @@ interface NannyData {
   experience_type: 'nanny' | 'cleaning' | 'both';
   employment_type: 'part_time' | 'full_time';
   experience_duration: number;
-  education_level:'high school no matric' | 'matric' | 'certificate' | 'diploma' | 'degree';
+  education_level: 'high school no matric' | 'matric' | 'certificate' | 'diploma' | 'degree';
   hourly_rate: number;
   training_first_aid: boolean;
   training_nanny: boolean;
@@ -27,6 +27,7 @@ interface NannyData {
   date_of_birth: string;
   accommodation_preference: 'live_in' | 'live_out';
   proof_of_residence_url: string;
+  cv_url: string;
 }
 
 interface ProfileData {
@@ -56,6 +57,7 @@ export default function NannyRegistrationForm({ userId, onComplete }: Props) {
     date_of_birth: '',
     accommodation_preference: 'live_out',
     proof_of_residence_url: '',
+    cv_url: '',
   });
   
   const [profileData, setProfileData] = useState<ProfileData>({
@@ -66,6 +68,7 @@ export default function NannyRegistrationForm({ userId, onComplete }: Props) {
   const [newLanguage, setNewLanguage] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadingCv, setUploadingCv] = useState(false);
 
   const addLanguage = () => {
     if (newLanguage.trim() && !formData.languages.includes(newLanguage.trim())) {
@@ -88,15 +91,63 @@ export default function NannyRegistrationForm({ userId, onComplete }: Props) {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    setUploading(true);
+    // Validate file type for CV
+    if (fileType === 'cv') {
+      const validCvTypes = [
+        'application/pdf', 
+        'application/msword', 
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      ];
+      if (!validCvTypes.includes(file.type)) {
+        toast({
+          title: "Invalid file type",
+          description: "Please upload a PDF or Word document (.pdf, .doc, .docx).",
+          variant: "destructive"
+        });
+        return;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        toast({
+          title: "File too large",
+          description: "Please upload a CV smaller than 10MB.",
+          variant: "destructive"
+        });
+        return;
+      }
+      setUploadingCv(true);
+    } else {
+      // Validate image/PDF for proof of residence
+      const validTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
+      if (!validTypes.includes(file.type)) {
+        toast({
+          title: "Invalid file type",
+          description: "Please upload a PDF, JPEG, or PNG file.",
+          variant: "destructive"
+        });
+        return;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        toast({
+          title: "File too large",
+          description: "Please upload a file smaller than 10MB.",
+          variant: "destructive"
+        });
+        return;
+      }
+      setUploading(true);
+    }
+
     try {
       const fileExt = file.name.split('.').pop();
-      const fileName = `${userId}/${fileType}.${fileExt}`;
+      const fileName = `${userId}/${fileType}-${Date.now()}.${fileExt}`;
 
       let bucket = '';
       switch (fileType) {
         case 'proof_of_residence':
           bucket = 'proof-of-residence';
+          break;
+        case 'cv':
+          bucket = 'cv-documents';
           break;
         default:
           throw new Error('Invalid file type');
@@ -130,6 +181,8 @@ export default function NannyRegistrationForm({ userId, onComplete }: Props) {
       });
     } finally {
       setUploading(false);
+      setUploadingCv(false);
+      event.target.value = '';
     }
   };
 
@@ -277,6 +330,7 @@ export default function NannyRegistrationForm({ userId, onComplete }: Props) {
             </div>
           </div>
 
+          {/* Proof of Residence Upload */}
           <div>
             <Label htmlFor="proof_of_residence">Proof of Residence</Label>
             <div className="border-2 border-dashed border-border rounded-lg p-4 text-center">
@@ -298,7 +352,54 @@ export default function NannyRegistrationForm({ userId, onComplete }: Props) {
                 </p>
               </label>
               {formData.proof_of_residence_url && (
-                <p className="text-sm text-green-600 mt-2">✓ Proof of residence uploaded</p>
+                <div className="mt-2">
+                  <p className="text-sm text-green-600">✓ Proof of residence uploaded</p>
+                  <a 
+                    href={formData.proof_of_residence_url} 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="text-sm text-blue-600 hover:underline"
+                  >
+                    View Document
+                  </a>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* CV Upload Section - NEW */}
+          <div>
+            <Label htmlFor="cv">Curriculum Vitae (CV) / Resume</Label>
+            <div className="border-2 border-dashed border-border rounded-lg p-4 text-center">
+              <input
+                type="file"
+                id="cv"
+                accept=".pdf,.doc,.docx"
+                onChange={(e) => handleFileUpload(e, 'cv')}
+                className="hidden"
+                disabled={uploadingCv}
+              />
+              <label htmlFor="cv" className="cursor-pointer">
+                <FileText className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground mb-1">
+                  {uploadingCv ? 'Uploading...' : 'Click to upload your CV'}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  PDF, DOC, DOCX accepted, up to 10MB
+                </p>
+              </label>
+              {formData.cv_url && (
+                <div className="mt-2">
+                  <p className="text-sm text-green-600">✓ CV uploaded</p>
+                  <a 
+                    href={formData.cv_url} 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="text-sm text-blue-600 hover:underline"
+                  >
+                    View CV
+                  </a>
+                </div>
               )}
             </div>
           </div>

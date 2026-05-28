@@ -8,7 +8,8 @@ import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
 import { 
   CheckCircle, Clock, Upload, Video, User, MapPin, Languages, 
-  GraduationCap, Award, Heart 
+  GraduationCap, Award, Heart, FileText, Eye, Calendar, DollarSign, Briefcase, Home,
+  AlertTriangle  // ADDED THIS
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import {
@@ -43,6 +44,9 @@ interface NannyProfile {
   date_of_birth: string | null;
   accommodation_preference: string | null;
   proof_of_residence_url: string | null;
+  cv_url: string | null;
+  employment_type: string | null;
+  average_rating: number | null;
 }
 
 interface UserProfile {
@@ -53,6 +57,7 @@ interface UserProfile {
   phone: string | null;
   city: string | null;
   suburb: string | null;
+  town: string | null;
   profile_picture_url: string | null;
 }
 
@@ -94,7 +99,46 @@ const getExperienceLabel = (duration: number | null): string => {
   return option.label;
 };
 
-// NEW: Function to send nanny interest response email via dedicated PHP endpoint
+const calculateAge = (dateOfBirth: string | null): number | null => {
+  if (!dateOfBirth) return null;
+  try {
+    const birthDate = new Date(dateOfBirth);
+    if (isNaN(birthDate.getTime())) return null;
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    return age;
+  } catch (error) {
+    console.error('Error calculating age:', error);
+    return null;
+  }
+};
+
+// Helper function to get missing requirements
+const getMissingRequirements = (nannyProfile: NannyProfile | null, userProfile: UserProfile | null): string[] => {
+  const missing: string[] = [];
+  
+  if (!nannyProfile?.date_of_birth) missing.push('Date of Birth');
+  if (!nannyProfile?.bio) missing.push('Bio / About Me');
+  if (!nannyProfile?.languages || nannyProfile.languages.length === 0) missing.push('Languages Spoken');
+  if (!nannyProfile?.experience_duration && nannyProfile?.experience_duration !== 0) missing.push('Experience Duration');
+  if (!nannyProfile?.hourly_rate) missing.push('Hourly Rate');
+  if (!nannyProfile?.education_level) missing.push('Education Level');
+  if (!nannyProfile?.criminal_check_url) missing.push('Criminal Check Document');
+  if (!nannyProfile?.credit_check_url) missing.push('Credit Check Document');
+  if (!nannyProfile?.proof_of_residence_url) missing.push('Proof of Residence');
+  if (!nannyProfile?.cv_url) missing.push('CV / Resume');
+  if (!nannyProfile?.interview_video_url) missing.push('Introduction Video');
+  if (!userProfile?.profile_picture_url) missing.push('Profile Picture');
+  if (!nannyProfile?.academy_completed) missing.push('Academy Training Completion');
+  
+  return missing;
+};
+
+// Function to send nanny interest response email via dedicated PHP endpoint
 const sendNannyInterestResponseEmail = async (emailData: any): Promise<{success: boolean, message?: string}> => {
   try {
     const response = await fetch('https://nannyplacementssouthafrica.co.za/send-nanny-interest-response.php', {
@@ -128,6 +172,7 @@ export default function NannyDashboard() {
   const [academyProgress, setAcademyProgress] = useState<AcademyProgress>({ total_videos: 0, completed_videos: 0, progress_percentage: 0 });
   const [interests, setInterests] = useState<Interest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState({ cv: false, criminal: false, credit: false, proof: false, video: false, picture: false });
 
   // Dialog state
   const [isVideoDialogOpen, setIsVideoDialogOpen] = useState(false);
@@ -157,6 +202,7 @@ export default function NannyDashboard() {
         criminal_check_status: nannyData.criminal_check_status as 'pending' | 'approved' | 'rejected' || 'pending',
         credit_check_status: nannyData.credit_check_status as 'pending' | 'approved' | 'rejected' || 'pending',
         proof_of_residence_status: ('proof_of_residence_status' in nannyData ? (nannyData as any).proof_of_residence_status as 'pending' | 'approved' | 'rejected' : 'pending'),
+        cv_url: nannyData.cv_url || null,
       };
       setNannyProfile(safeNannyData);
 
@@ -233,23 +279,62 @@ export default function NannyDashboard() {
     }
   };
 
-  const handleFileUpload = async (file: File, type: 'criminal_check' | 'credit_check' | 'interview_video' | 'profile_picture' | 'intro_video' | 'proof_of_residence') => {
+  const handleFileUpload = async (file: File, type: 'criminal_check' | 'credit_check' | 'interview_video' | 'profile_picture' | 'intro_video' | 'proof_of_residence' | 'cv') => {
+    // Validate file type for CV
+    if (type === 'cv') {
+      const validCvTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+      if (!validCvTypes.includes(file.type)) {
+        toast({
+          title: "Invalid file type",
+          description: "Please upload a PDF or Word document (.pdf, .doc, .docx).",
+          variant: "destructive"
+        });
+        return;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        toast({
+          title: "File too large",
+          description: "Please upload a CV smaller than 10MB.",
+          variant: "destructive"
+        });
+        return;
+      }
+    }
+
+    const uploadingKey = type === 'cv' ? 'cv' :
+                        type === 'criminal_check' ? 'criminal' :
+                        type === 'credit_check' ? 'credit' :
+                        type === 'proof_of_residence' ? 'proof' :
+                        type === 'profile_picture' ? 'picture' : 'video';
+    
+    setUploading(prev => ({ ...prev, [uploadingKey]: true }));
+    
     try {
       const fileExt = file.name.split('.').pop();
       const fileName = `${user?.id}/${type}-${Date.now()}.${fileExt}`;
 
-      const bucketName = type === 'criminal_check'
-        ? 'criminal-checks'
-        : type === 'credit_check'
-        ? 'credit-checks'
-        : type === 'profile_picture'
-        ? 'profile-pictures'
-        : type === 'proof_of_residence'
-        ? 'proof-of-residence'
-        : 'interview-videos';
+      let bucketName = '';
+      switch (type) {
+        case 'criminal_check':
+          bucketName = 'criminal-checks';
+          break;
+        case 'credit_check':
+          bucketName = 'credit-checks';
+          break;
+        case 'profile_picture':
+          bucketName = 'profile-pictures';
+          break;
+        case 'proof_of_residence':
+          bucketName = 'proof-of-residence';
+          break;
+        case 'cv':
+          bucketName = 'cv-documents';
+          break;
+        default:
+          bucketName = 'interview-videos';
+      }
 
-      const { error: uploadError } = await supabase.storage.from(bucketName).upload(fileName, file);
-
+      const { error: uploadError } = await supabase.storage.from(bucketName).upload(fileName, file, { upsert: true });
       if (uploadError) throw uploadError;
 
       const { data: urlData } = supabase.storage.from(bucketName).getPublicUrl(fileName);
@@ -260,9 +345,7 @@ export default function NannyDashboard() {
           .from('profiles')
           .update({ profile_picture_url: fileUrl })
           .eq('id', user?.id);
-
         if (updateError) throw updateError;
-
         if (userProfile) {
           setUserProfile({ ...userProfile, profile_picture_url: fileUrl });
         }
@@ -279,15 +362,15 @@ export default function NannyDashboard() {
         } else if (type === 'proof_of_residence') {
           updateData.proof_of_residence_url = fileUrl;
           updateData.proof_of_residence_status = 'pending';
+        } else if (type === 'cv') {
+          updateData.cv_url = fileUrl;
         }
 
         const { error: updateError } = await supabase
           .from('nannies')
           .update(updateData)
           .eq('user_id', user?.id);
-
         if (updateError) throw updateError;
-
         if (nannyProfile) {
           setNannyProfile({ ...nannyProfile, ...updateData });
         }
@@ -303,16 +386,16 @@ export default function NannyDashboard() {
         description: error.message,
         variant: 'destructive',
       });
+    } finally {
+      setUploading(prev => ({ ...prev, [uploadingKey]: false }));
     }
   };
 
-  // UPDATED: Handle interest response with new PHP endpoint
   const handleInterestResponse = async (interestId: string, response: 'approved' | 'declined') => {
     const interest = interests.find(i => i.id === interestId);
     if (!interest || !userProfile) return;
 
     try {
-      // First update the interest in the database
       const { data, error: updateError } = await supabase
         .from('interests')
         .update({
@@ -331,10 +414,8 @@ export default function NannyDashboard() {
         return;
       }
 
-      // Update local state
       setInterests(interests.map(i => i.id === interestId ? data[0] as Interest : i));
 
-      // Send email to client using NEW dedicated PHP endpoint
       const emailData = {
         to: interest.client_email || '',
         subject: `Interest Request ${response === 'approved' ? 'Approved' : 'Declined'} - Nanny Placements SA`,
@@ -400,6 +481,10 @@ export default function NannyDashboard() {
     return <Badge variant="outline">Not Uploaded</Badge>;
   };
 
+  const age = calculateAge(nannyProfile?.date_of_birth || null);
+  const missingRequirements = getMissingRequirements(nannyProfile, userProfile);
+  const isProfileComplete = missingRequirements.length === 0 && nannyProfile?.profile_approved === true;
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-8">
@@ -440,6 +525,13 @@ export default function NannyDashboard() {
                   }
                 </div>
                 <div className="flex items-center justify-between">
+                  <span>CV / Resume</span>
+                  {nannyProfile?.cv_url ? 
+                    <Badge variant="default" className="bg-green-500"><CheckCircle className="h-3 w-3 mr-1" />Uploaded</Badge> : 
+                    <Badge variant="outline">Not Uploaded</Badge>
+                  }
+                </div>
+                <div className="flex items-center justify-between">
                   <span>Academy Training</span>
                   {getStatusBadge('', nannyProfile?.academy_completed || false)}
                 </div>
@@ -448,9 +540,50 @@ export default function NannyDashboard() {
                   {getStatusBadge('', nannyProfile?.profile_approved || false)}
                 </div>
               </div>
-              {!nannyProfile?.profile_approved && (
+              
+              {/* ENHANCED INCOMPLETE PROFILE BANNER - Shows exactly what's missing */}
+              {!isProfileComplete && (
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                  <p className="text-sm text-yellow-800">Complete all requirements to get your profile approved and start receiving client interest.</p>
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-yellow-800 mb-2">
+                        Your profile is {missingRequirements.length} item{missingRequirements.length !== 1 ? 's' : ''} away from being complete!
+                      </p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        {missingRequirements.map((item, index) => (
+                          <div key={index} className="flex items-center gap-2">
+                            <div className="w-1.5 h-1.5 rounded-full bg-yellow-600"></div>
+                            <span className="text-sm text-yellow-700">{item}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-3 pt-2 border-t border-yellow-200">
+                        <p className="text-xs text-yellow-600">
+                          <Link to="/profile" className="font-medium underline hover:text-yellow-800">
+                            Click here to complete your profile →
+                          </Link>
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Success banner when profile is fully complete but pending approval */}
+              {missingRequirements.length === 0 && nannyProfile?.profile_approved === false && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <div className="flex items-center gap-3">
+                    <CheckCircle className="h-5 w-5 text-green-600" />
+                    <div>
+                      <p className="text-sm font-medium text-green-800">
+                        Your profile is 100% complete!
+                      </p>
+                      <p className="text-sm text-green-700">
+                        Waiting for admin approval. You'll be notified once approved.
+                      </p>
+                    </div>
+                  </div>
                 </div>
               )}
             </CardContent>
@@ -472,48 +605,119 @@ export default function NannyDashboard() {
             </CardContent>
           </Card>
 
-          {/* Profile Information */}
+          {/* Profile Information - Enhanced */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2"><User className="h-5 w-5" /> Profile Information</CardTitle>
               <CardDescription>Your professional nanny profile</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Personal Details Row */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium text-muted-foreground">Location</label>
-                  <p className="flex items-center gap-1"><MapPin className="h-4 w-4" />{userProfile?.suburb}, {userProfile?.city}</p>
+                  <label className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+                    <User className="h-3 w-3" /> Full Name
+                  </label>
+                  <p>{userProfile?.first_name} {userProfile?.last_name}</p>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-muted-foreground">Date of Birth</label>
-                  <p>
-                    {nannyProfile?.date_of_birth ? 
-                      new Date(nannyProfile.date_of_birth).toLocaleDateString() : 
-                      'Not specified'
-                    }
-                  </p>
+                  <label className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+                    <Calendar className="h-3 w-3" /> Age
+                  </label>
+                  <p>{age ? `${age} years` : 'Not specified'}</p>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-muted-foreground">Languages</label>
-                  <p className="flex items-center gap-1"><Languages className="h-4 w-4" />{nannyProfile?.languages?.join(', ') || 'Not specified'}</p>
+                  <label className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+                    <MapPin className="h-3 w-3" /> Location
+                  </label>
+                  <p>{userProfile?.suburb ? `${userProfile.suburb}, ` : ''}{userProfile?.city || 'Not specified'}</p>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-muted-foreground">Accommodation</label>
-                  <p className="capitalize">
-                    {nannyProfile?.accommodation_preference?.replace('_', ' ') || 'Not specified'}
-                  </p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Experience</label>
-                  <p className="flex items-center gap-1"><Award className="h-4 w-4" />{getExperienceLabel(nannyProfile?.experience_duration)} - {nannyProfile?.experience_type}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Education</label>
-                  <p className="flex items-center gap-1"><GraduationCap className="h-4 w-4" />{nannyProfile?.education_level || 'Not specified'}</p>
+                  <label className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+                    <Home className="h-3 w-3" /> Accommodation
+                  </label>
+                  <p className="capitalize">{nannyProfile?.accommodation_preference?.replace('_', ' ') || 'Not specified'}</p>
                 </div>
               </div>
-              <div><label className="text-sm font-medium text-muted-foreground">Bio</label><p className="text-sm mt-1">{nannyProfile?.bio || 'No bio provided'}</p></div>
-              <Link to="/profile"><Button variant="outline" className="w-full">Edit Profile</Button></Link>
+
+              {/* Professional Details Row */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+                    <Briefcase className="h-3 w-3" /> Experience
+                  </label>
+                  <p>{getExperienceLabel(nannyProfile?.experience_duration)} - {nannyProfile?.experience_type}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+                    <DollarSign className="h-3 w-3" /> Hourly Rate
+                  </label>
+                  <p>R{nannyProfile?.hourly_rate || 'Not specified'}/hour</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+                    <GraduationCap className="h-3 w-3" /> Education
+                  </label>
+                  <p className="capitalize">{nannyProfile?.education_level?.replace(/_/g, ' ') || 'Not specified'}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+                    <Languages className="h-3 w-3" /> Languages
+                  </label>
+                  <p>{nannyProfile?.languages?.join(', ') || 'Not specified'}</p>
+                </div>
+              </div>
+
+              {/* Rating */}
+              {nannyProfile?.average_rating && (
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+                    <Award className="h-3 w-3" /> Client Rating
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <div className="flex">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <Star
+                          key={star}
+                          className={`h-4 w-4 ${
+                            star <= (nannyProfile.average_rating || 0)
+                              ? 'fill-yellow-400 text-yellow-400'
+                              : 'text-gray-300'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                    <span className="font-medium">{nannyProfile.average_rating.toFixed(1)} / 5</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Bio */}
+              {nannyProfile?.bio && (
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Bio</label>
+                  <p className="text-sm mt-1 whitespace-pre-wrap">{nannyProfile.bio}</p>
+                </div>
+              )}
+
+              {/* CV Link if uploaded */}
+              {nannyProfile?.cv_url && (
+                <div className="mt-2 p-3 bg-green-50 rounded-md">
+                  <label className="text-sm font-medium text-green-800 flex items-center gap-1">
+                    <FileText className="h-4 w-4" /> CV / Resume
+                  </label>
+                  <a 
+                    href={nannyProfile.cv_url} 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="text-sm text-blue-600 hover:underline flex items-center gap-1 mt-1"
+                  >
+                    <Eye className="h-3 w-3" /> View uploaded CV
+                  </a>
+                </div>
+              )}
+
+              <Link to="/profile"><Button variant="outline" className="w-full">Edit Full Profile</Button></Link>
             </CardContent>
           </Card>
         </div>
@@ -555,6 +759,51 @@ export default function NannyDashboard() {
                   <video controls className="w-full max-h-32 rounded" src={nannyProfile.interview_video_url}>
                     Your browser does not support the video tag.
                   </video>
+                </div>
+              )}
+
+              {/* CV UPLOAD BUTTON */}
+              {!nannyProfile?.cv_url ? (
+                <div>
+                  <input
+                    type="file"
+                    id="cv-upload"
+                    accept=".pdf,.doc,.docx"
+                    className="hidden"
+                    onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0], 'cv')}
+                  />
+                  <Button 
+                    variant="outline" 
+                    className="w-full justify-start"
+                    onClick={() => document.getElementById('cv-upload')?.click()}
+                    disabled={uploading.cv}
+                  >
+                    {uploading.cv ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2"></div>
+                        Uploading...
+                      </>
+                    ) : (
+                      <>
+                        <FileText className="h-4 w-4 mr-2" />
+                        Upload CV / Resume
+                      </>
+                    )}
+                  </Button>
+                </div>
+              ) : (
+                <div className="p-3 bg-green-50 rounded-md">
+                  <p className="text-sm text-green-800 font-medium flex items-center gap-1">
+                    <CheckCircle className="h-4 w-4" /> CV Uploaded
+                  </p>
+                  <a 
+                    href={nannyProfile.cv_url} 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="text-sm text-blue-600 hover:underline flex items-center gap-1 mt-1"
+                  >
+                    <Eye className="h-3 w-3" /> View CV
+                  </a>
                 </div>
               )}
 
@@ -645,7 +894,7 @@ export default function NannyDashboard() {
             </CardContent>
           </Card>
 
-          {/* CLIENT INTEREST REQUESTS — PRIVACY FIXED */}
+          {/* CLIENT INTEREST REQUESTS */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -775,3 +1024,15 @@ export default function NannyDashboard() {
     </div>
   );
 }
+
+// Add Star component since it's missing from imports
+const Star = ({ className }: { className?: string }) => (
+  <svg 
+    xmlns="http://www.w3.org/2000/svg" 
+    viewBox="0 0 24 24" 
+    fill="currentColor" 
+    className={className}
+  >
+    <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
+  </svg>
+);

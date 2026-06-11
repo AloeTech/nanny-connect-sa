@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
-import { Heart, LogOut, Menu, Shield, User, Users, Video } from "lucide-react";
+import { Heart, LogOut, Menu, Shield, User, Users, Video, Sparkles } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   DropdownMenu,
@@ -16,12 +16,12 @@ export default function Navbar() {
   const { user, userRole, signOut } = useAuth();
   const navigate = useNavigate();
 
-  // NEW: Control mobile menu open/close state
+  // Control mobile menu open/close state
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const handleSignOut = async () => {
     await signOut();
-    setMobileMenuOpen(false); // also close menu on sign out
+    setMobileMenuOpen(false);
   };
 
   const getDashboardRoute = () => {
@@ -51,7 +51,10 @@ export default function Navbar() {
             to="/find-cleaner" 
             onClick={() => mobile && setMobileMenuOpen(false)}
           >
-            <Button variant="ghost">Find a Cleaner</Button>
+            <Button variant="ghost" className="gap-2">
+              <Sparkles className="h-4 w-4" />
+              Find a Cleaner
+            </Button>
           </Link>
           <Link 
             to="/about" 
@@ -80,6 +83,17 @@ export default function Navbar() {
               Academy
             </Button>
           </Link>
+          {/* Nannies can also find cleaning jobs if they have cleaning experience */}
+          <Link 
+            to="/find-cleaner" 
+            onClick={() => mobile && setMobileMenuOpen(false)}
+            className="gap-2"
+          >
+            <Button variant="ghost">
+              <Sparkles className="h-4 w-4" />
+              Find Cleaner Jobs
+            </Button>
+          </Link>
         </>
       )}
       
@@ -99,6 +113,17 @@ export default function Navbar() {
             <Button variant="ghost">
               <Users className="h-4 w-4" />
               Find Nannies
+            </Button>
+          </Link>
+          {/* NEW: Find Cleaners for clients */}
+          <Link 
+            to="/find-cleaner" 
+            onClick={() => mobile && setMobileMenuOpen(false)}
+            className="gap-2"
+          >
+            <Button variant="ghost">
+              <Sparkles className="h-4 w-4" />
+              Find Cleaners
             </Button>
           </Link>
         </>
@@ -216,7 +241,7 @@ export default function Navbar() {
             )}
           </div>
 
-          {/* Mobile Navigation – FIXED */}
+          {/* Mobile Navigation */}
           <div className="md:hidden">
             <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
               <SheetTrigger asChild>

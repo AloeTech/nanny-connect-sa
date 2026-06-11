@@ -7,7 +7,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { X, Upload, FileText } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { X, Upload, FileText, User, Briefcase, GraduationCap, Heart, ChevronDown, ChevronUp } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { SOUTH_AFRICAN_CITIES } from "@/data/southAfricanCities";
@@ -28,6 +29,8 @@ interface NannyData {
   accommodation_preference: 'live_in' | 'live_out';
   proof_of_residence_url: string;
   cv_url: string;
+  nationality: string; // NEW
+  profile_picture_url: string; // NEW - optional
 }
 
 interface ProfileData {
@@ -40,8 +43,23 @@ interface Props {
   onComplete: () => void;
 }
 
+// Nationality options
+const NATIONALITIES = [
+  'South African', 'Zimbabwean', 'Malawian', 'Namibian', 'Botswanan',
+  'Lesotho', 'Eswatini (Swaziland)', 'Mozambican', 'Zambian', 'Angolan',
+  'Nigerian', 'Ghanaian', 'Kenyan', 'Other African', 'British', 'German',
+  'Dutch', 'Portuguese', 'French', 'American', 'Other European', 'Other'
+];
+
 export default function NannyRegistrationForm({ userId, onComplete }: Props) {
   const { toast } = useToast();
+  const [expandedSections, setExpandedSections] = useState({
+    personal: true,
+    professional: true,
+    documents: true,
+    training: true,
+  });
+  
   const [formData, setFormData] = useState<NannyData>({
     bio: '',
     languages: [],
@@ -58,6 +76,8 @@ export default function NannyRegistrationForm({ userId, onComplete }: Props) {
     accommodation_preference: 'live_out',
     proof_of_residence_url: '',
     cv_url: '',
+    nationality: '', // NEW
+    profile_picture_url: '', // NEW
   });
   
   const [profileData, setProfileData] = useState<ProfileData>({
@@ -69,6 +89,62 @@ export default function NannyRegistrationForm({ userId, onComplete }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadingCv, setUploadingCv] = useState(false);
+  const [uploadingProfilePic, setUploadingProfilePic] = useState(false);
+
+  // Calculate completion percentage
+  const calculateCompletion = () => {
+    let completed = 0;
+    let total = 0;
+    
+    // Personal info section
+    if (formData.date_of_birth) completed++;
+    total++;
+    if (formData.nationality) completed++;
+    total++;
+    if (profileData.city) completed++;
+    total++;
+    if (profileData.town) completed++;
+    total++;
+    
+    // Professional section
+    if (formData.bio && formData.bio.length > 20) completed++;
+    total++;
+    if (formData.languages.length > 0) completed++;
+    total++;
+    if (formData.experience_type) completed++;
+    total++;
+    if (formData.experience_duration > 0) completed++;
+    total++;
+    if (formData.education_level) completed++;
+    total++;
+    if (formData.hourly_rate > 0) completed++;
+    total++;
+    if (formData.employment_type) completed++;
+    total++;
+    if (formData.accommodation_preference) completed++;
+    total++;
+    
+    // Documents
+    if (formData.proof_of_residence_url) completed++;
+    total++;
+    if (formData.cv_url) completed++;
+    total++;
+    
+    // Training
+    if (formData.training_first_aid) completed++;
+    if (formData.training_cpr) completed++;
+    if (formData.training_nanny) completed++;
+    if (formData.training_child_development) completed++;
+    total += 4;
+    
+    return Math.round((completed / total) * 100);
+  };
+
+  const completionPercentage = calculateCompletion();
+
+  const toggleSection = (section: keyof typeof expandedSections) => {
+    setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
+  };
 
   const addLanguage = () => {
     if (newLanguage.trim() && !formData.languages.includes(newLanguage.trim())) {
@@ -87,11 +163,68 @@ export default function NannyRegistrationForm({ userId, onComplete }: Props) {
     }));
   };
 
+  const handleProfilePictureUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const validTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp'];
+    if (!validTypes.includes(file.type)) {
+      toast({
+        title: "Invalid file type",
+        description: "Please upload a JPEG, PNG, or WebP image.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Please upload a profile picture smaller than 5MB.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setUploadingProfilePic(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${userId}/profile-picture-${Date.now()}.${fileExt}`;
+      const bucket = 'profile-pictures';
+
+      const { error: uploadError } = await supabase.storage
+        .from(bucket)
+        .upload(fileName, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from(bucket)
+        .getPublicUrl(fileName);
+
+      setFormData(prev => ({ ...prev, profile_picture_url: publicUrl }));
+
+      toast({
+        title: "Success",
+        description: "Profile picture uploaded successfully!",
+      });
+    } catch (error) {
+      console.error('Upload error:', error);
+      toast({
+        title: "Upload failed",
+        description: "There was an error uploading your profile picture.",
+        variant: "destructive"
+      });
+    } finally {
+      setUploadingProfilePic(false);
+      event.target.value = '';
+    }
+  };
+
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>, fileType: string) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    // Validate file type for CV
     if (fileType === 'cv') {
       const validCvTypes = [
         'application/pdf', 
@@ -116,7 +249,6 @@ export default function NannyRegistrationForm({ userId, onComplete }: Props) {
       }
       setUploadingCv(true);
     } else {
-      // Validate image/PDF for proof of residence
       const validTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
       if (!validTypes.includes(file.type)) {
         toast({
@@ -203,6 +335,15 @@ export default function NannyRegistrationForm({ userId, onComplete }: Props) {
     setSubmitting(true);
 
     try {
+      // Update profile with profile picture
+      if (formData.profile_picture_url) {
+        const { error: profilePicError } = await supabase
+          .from('profiles')
+          .update({ profile_picture_url: formData.profile_picture_url })
+          .eq('id', userId);
+        if (profilePicError) console.error('Profile pic update error:', profilePicError);
+      }
+
       // Update nanny profile
       const { error: nannyError } = await supabase
         .from('nannies')
@@ -244,275 +385,425 @@ export default function NannyRegistrationForm({ userId, onComplete }: Props) {
         <CardDescription>
           Tell families about your experience and qualifications
         </CardDescription>
+        <div className="mt-4">
+          <div className="flex justify-between text-sm mb-2">
+            <span>Profile Completion</span>
+            <span className="font-medium">{completionPercentage}%</span>
+          </div>
+          <Progress value={completionPercentage} className="h-2" />
+          <p className="text-xs text-muted-foreground mt-2">
+            {completionPercentage === 100 
+              ? "✓ All set! You're ready to go." 
+              : "Complete all sections to get approved faster!"}
+          </p>
+        </div>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <Label htmlFor="bio">Bio</Label>
-            <Textarea
-              id="bio"
-              placeholder="Tell families about yourself..."
-              value={formData.bio}
-              onChange={(e) => setFormData(prev => ({ ...prev, bio: e.target.value }))}
-              rows={4}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="date_of_birth">Date of Birth</Label>
-              <Input
-                id="date_of_birth"
-                type="date"
-                value={formData.date_of_birth}
-                onChange={(e) => setFormData(prev => ({ ...prev, date_of_birth: e.target.value }))}
-              />
-              {formData.date_of_birth && (
-                <p className="text-sm text-muted-foreground mt-1">
-                  Age: {calculateAge(formData.date_of_birth)} years
-                </p>
-              )}
-            </div>
-
-            <div>
-              <Label htmlFor="accommodation_preference">Accommodation Preference</Label>
-              <Select value={formData.accommodation_preference} onValueChange={(value: any) => setFormData(prev => ({ ...prev, accommodation_preference: value }))}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="live_in">Live In</SelectItem>
-                  <SelectItem value="live_out">Live Out</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="employment_type">Employment Type</Label>
-              <Select value={formData.employment_type} onValueChange={(value: any) => setFormData(prev => ({ ...prev, employment_type: value }))}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="part_time">Part Time</SelectItem>
-                  <SelectItem value="full_time">Full Time</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div></div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="city">City</Label>
-              <Select value={profileData.city} onValueChange={(value) => setProfileData(prev => ({ ...prev, city: value }))}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select your city" />
-                </SelectTrigger>
-                <SelectContent>
-                  {SOUTH_AFRICAN_CITIES.map((city) => (
-                    <SelectItem key={city} value={city}>{city}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label htmlFor="town">Town/Suburb</Label>
-              <Input
-                id="town"
-                placeholder="Enter your town or suburb"
-                value={profileData.town}
-                onChange={(e) => setProfileData(prev => ({ ...prev, town: e.target.value }))}
-              />
-            </div>
-          </div>
-
-          {/* Proof of Residence Upload */}
-          <div>
-            <Label htmlFor="proof_of_residence">Proof of Residence</Label>
-            <div className="border-2 border-dashed border-border rounded-lg p-4 text-center">
-              <input
-                type="file"
-                id="proof_of_residence"
-                accept=".pdf,.jpg,.jpeg,.png"
-                onChange={(e) => handleFileUpload(e, 'proof_of_residence')}
-                className="hidden"
-                disabled={uploading}
-              />
-              <label htmlFor="proof_of_residence" className="cursor-pointer">
-                <Upload className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground mb-1">
-                  {uploading ? 'Uploading...' : 'Click to upload proof of residence'}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  PDF, JPG, JPEG, PNG up to 10MB
-                </p>
-              </label>
-              {formData.proof_of_residence_url && (
-                <div className="mt-2">
-                  <p className="text-sm text-green-600">✓ Proof of residence uploaded</p>
-                  <a 
-                    href={formData.proof_of_residence_url} 
-                    target="_blank" 
-                    rel="noopener noreferrer" 
-                    className="text-sm text-blue-600 hover:underline"
-                  >
-                    View Document
-                  </a>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* CV Upload Section - NEW */}
-          <div>
-            <Label htmlFor="cv">Curriculum Vitae (CV) / Resume</Label>
-            <div className="border-2 border-dashed border-border rounded-lg p-4 text-center">
-              <input
-                type="file"
-                id="cv"
-                accept=".pdf,.doc,.docx"
-                onChange={(e) => handleFileUpload(e, 'cv')}
-                className="hidden"
-                disabled={uploadingCv}
-              />
-              <label htmlFor="cv" className="cursor-pointer">
-                <FileText className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground mb-1">
-                  {uploadingCv ? 'Uploading...' : 'Click to upload your CV'}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  PDF, DOC, DOCX accepted, up to 10MB
-                </p>
-              </label>
-              {formData.cv_url && (
-                <div className="mt-2">
-                  <p className="text-sm text-green-600">✓ CV uploaded</p>
-                  <a 
-                    href={formData.cv_url} 
-                    target="_blank" 
-                    rel="noopener noreferrer" 
-                    className="text-sm text-blue-600 hover:underline"
-                  >
-                    View CV
-                  </a>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div>
-            <Label>Languages</Label>
-            <div className="flex gap-2 mb-2">
-              <Input
-                placeholder="Add a language"
-                value={newLanguage}
-                onChange={(e) => setNewLanguage(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addLanguage())}
-              />
-              <Button type="button" onClick={addLanguage}>Add</Button>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {formData.languages.map((language) => (
-                <Badge key={language} variant="secondary" className="flex items-center gap-1">
-                  {language}
-                  <X className="h-3 w-3 cursor-pointer" onClick={() => removeLanguage(language)} />
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* ========== PERSONAL INFORMATION SECTION ========== */}
+          <div className="border rounded-lg overflow-hidden">
+            <button
+              type="button"
+              className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 transition-colors"
+              onClick={() => toggleSection('personal')}
+            >
+              <div className="flex items-center gap-2">
+                <User className="h-5 w-5 text-primary" />
+                <span className="font-semibold">Personal Information</span>
+                <Badge variant="secondary" className="ml-2">
+                  {formData.date_of_birth && formData.nationality && profileData.city ? 'Complete' : 'Required'}
                 </Badge>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <Label htmlFor="experience_type">Experience Type</Label>
-            <Select value={formData.experience_type} onValueChange={(value: any) => setFormData(prev => ({ ...prev, experience_type: value }))}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="nanny">Nanny only</SelectItem>
-                <SelectItem value="cleaning">Cleaning only</SelectItem>
-                <SelectItem value="both">Both nanny & cleaning</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div>
-            <Label htmlFor="experience_duration">Experience Duration (months)</Label>
-            <Input
-              id="experience_duration"
-              type="number"
-              min="0"
-              value={formData.experience_duration}
-              onChange={(e) => setFormData(prev => ({ ...prev, experience_duration: parseInt(e.target.value) || 0 }))}
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="education_level">Education Level</Label>
-            <Select value={formData.education_level} onValueChange={(value: any) => setFormData(prev => ({ ...prev, education_level: value }))}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="high school no matric">No Matric</SelectItem>
-                <SelectItem value="matric">Matric</SelectItem>
-                <SelectItem value="certificate">Certificate</SelectItem>
-                <SelectItem value="diploma">Diploma</SelectItem>
-                <SelectItem value="degree">Degree</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div>
-            <Label htmlFor="hourly_rate">Hourly Rate (R)</Label>
-            <Input
-              id="hourly_rate"
-              type="number"
-              min="0"
-              value={formData.hourly_rate}
-              onChange={(e) => setFormData(prev => ({ ...prev, hourly_rate: parseFloat(e.target.value) || 0 }))}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label>Training & Certifications</Label>
-            <div className="space-y-2">
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="first_aid"
-                  checked={formData.training_first_aid}
-                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, training_first_aid: !!checked }))}
-                />
-                <Label htmlFor="first_aid">First Aid Training</Label>
               </div>
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="cpr"
-                  checked={formData.training_cpr}
-                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, training_cpr: !!checked }))}
-                />
-                <Label htmlFor="cpr">CPR Training</Label>
+              {expandedSections.personal ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </button>
+            {expandedSections.personal && (
+              <div className="p-4 space-y-4">
+                {/* Profile Picture Upload - NEW */}
+                <div>
+                  <Label htmlFor="profile_picture">Profile Picture (Optional)</Label>
+                  <div className="border-2 border-dashed border-border rounded-lg p-4 text-center">
+                    <input
+                      type="file"
+                      id="profile_picture"
+                      accept=".jpg,.jpeg,.png,.webp"
+                      onChange={handleProfilePictureUpload}
+                      className="hidden"
+                      disabled={uploadingProfilePic}
+                    />
+                    <label htmlFor="profile_picture" className="cursor-pointer">
+                      <Upload className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                      <p className="text-sm text-muted-foreground mb-1">
+                        {uploadingProfilePic ? 'Uploading...' : 'Click to upload profile picture'}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        JPG, PNG, WebP up to 5MB
+                      </p>
+                    </label>
+                    {formData.profile_picture_url && (
+                      <div className="mt-2">
+                        <p className="text-sm text-green-600">✓ Profile picture uploaded</p>
+                        <img 
+                          src={formData.profile_picture_url} 
+                          alt="Profile" 
+                          className="w-20 h-20 rounded-full object-cover mx-auto mt-2"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="date_of_birth">Date of Birth *</Label>
+                    <Input
+                      id="date_of_birth"
+                      type="date"
+                      value={formData.date_of_birth}
+                      onChange={(e) => setFormData(prev => ({ ...prev, date_of_birth: e.target.value }))}
+                    />
+                    {formData.date_of_birth && (
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Age: {calculateAge(formData.date_of_birth)} years
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Nationality Field - NEW */}
+                  <div>
+                    <Label htmlFor="nationality">Nationality *</Label>
+                    <Select 
+                      value={formData.nationality} 
+                      onValueChange={(value) => setFormData(prev => ({ ...prev, nationality: value }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select your nationality" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {NATIONALITIES.map((nation) => (
+                          <SelectItem key={nation} value={nation}>{nation}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="city">City *</Label>
+                    <Select value={profileData.city} onValueChange={(value) => setProfileData(prev => ({ ...prev, city: value }))}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select your city" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {SOUTH_AFRICAN_CITIES.map((city) => (
+                          <SelectItem key={city} value={city}>{city}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="town">Town/Suburb *</Label>
+                    <Input
+                      id="town"
+                      placeholder="Enter your town or suburb"
+                      value={profileData.town}
+                      onChange={(e) => setProfileData(prev => ({ ...prev, town: e.target.value }))}
+                    />
+                  </div>
+                </div>
               </div>
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="nanny_training"
-                  checked={formData.training_nanny}
-                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, training_nanny: !!checked }))}
-                />
-                <Label htmlFor="nanny_training">Foundational Nanny Training</Label>
+            )}
+          </div>
+
+          {/* ========== PROFESSIONAL INFORMATION SECTION ========== */}
+          <div className="border rounded-lg overflow-hidden">
+            <button
+              type="button"
+              className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 transition-colors"
+              onClick={() => toggleSection('professional')}
+            >
+              <div className="flex items-center gap-2">
+                <Briefcase className="h-5 w-5 text-primary" />
+                <span className="font-semibold">Professional Information</span>
+                <Badge variant="secondary" className="ml-2">
+                  {formData.bio && formData.languages.length > 0 && formData.hourly_rate > 0 ? 'Complete' : 'Required'}
+                </Badge>
               </div>
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="child_dev"
-                  checked={formData.training_child_development}
-                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, training_child_development: !!checked }))}
-                />
-                <Label htmlFor="child_dev">Child Development Training</Label>
+              {expandedSections.professional ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </button>
+            {expandedSections.professional && (
+              <div className="p-4 space-y-4">
+                <div>
+                  <Label htmlFor="bio">Bio *</Label>
+                  <Textarea
+                    id="bio"
+                    placeholder="Tell families about yourself, your experience, and what makes you special..."
+                    value={formData.bio}
+                    onChange={(e) => setFormData(prev => ({ ...prev, bio: e.target.value }))}
+                    rows={4}
+                  />
+                </div>
+
+                <div>
+                  <Label>Languages Spoken *</Label>
+                  <div className="flex gap-2 mb-2">
+                    <Input
+                      placeholder="Add a language"
+                      value={newLanguage}
+                      onChange={(e) => setNewLanguage(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addLanguage())}
+                    />
+                    <Button type="button" onClick={addLanguage}>Add</Button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {formData.languages.map((language) => (
+                      <Badge key={language} variant="secondary" className="flex items-center gap-1">
+                        {language}
+                        <X className="h-3 w-3 cursor-pointer" onClick={() => removeLanguage(language)} />
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="experience_type">Experience Type *</Label>
+                    <Select value={formData.experience_type} onValueChange={(value: any) => setFormData(prev => ({ ...prev, experience_type: value }))}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="nanny">Nanny only</SelectItem>
+                        <SelectItem value="cleaning">Cleaning only</SelectItem>
+                        <SelectItem value="both">Both nanny & cleaning</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="experience_duration">Experience Duration *</Label>
+                    <Input
+                      id="experience_duration"
+                      type="number"
+                      min="0"
+                      placeholder="Months of experience"
+                      value={formData.experience_duration}
+                      onChange={(e) => setFormData(prev => ({ ...prev, experience_duration: parseInt(e.target.value) || 0 }))}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">Enter number of months (e.g., 24 for 2 years)</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="education_level">Education Level *</Label>
+                    <Select value={formData.education_level} onValueChange={(value: any) => setFormData(prev => ({ ...prev, education_level: value }))}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="high school no matric">No Matric</SelectItem>
+                        <SelectItem value="matric">Matric</SelectItem>
+                        <SelectItem value="certificate">Certificate</SelectItem>
+                        <SelectItem value="diploma">Diploma</SelectItem>
+                        <SelectItem value="degree">Degree</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="hourly_rate">Hourly Rate (R) *</Label>
+                    <Input
+                      id="hourly_rate"
+                      type="number"
+                      min="0"
+                      placeholder="e.g., 50"
+                      value={formData.hourly_rate}
+                      onChange={(e) => setFormData(prev => ({ ...prev, hourly_rate: parseFloat(e.target.value) || 0 }))}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="employment_type">Employment Type *</Label>
+                    <Select value={formData.employment_type} onValueChange={(value: any) => setFormData(prev => ({ ...prev, employment_type: value }))}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="part_time">Part Time</SelectItem>
+                        <SelectItem value="full_time">Full Time</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="accommodation_preference">Accommodation Preference *</Label>
+                    <Select value={formData.accommodation_preference} onValueChange={(value: any) => setFormData(prev => ({ ...prev, accommodation_preference: value }))}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="live_in">Live In</SelectItem>
+                        <SelectItem value="live_out">Live Out</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
+          </div>
+
+          {/* ========== DOCUMENTS SECTION ========== */}
+          <div className="border rounded-lg overflow-hidden">
+            <button
+              type="button"
+              className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 transition-colors"
+              onClick={() => toggleSection('documents')}
+            >
+              <div className="flex items-center gap-2">
+                <FileText className="h-5 w-5 text-primary" />
+                <span className="font-semibold">Documents</span>
+                <Badge variant="secondary" className="ml-2">
+                  {formData.proof_of_residence_url && formData.cv_url ? 'Complete' : 'Required'}
+                </Badge>
+              </div>
+              {expandedSections.documents ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </button>
+            {expandedSections.documents && (
+              <div className="p-4 space-y-4">
+                <div>
+                  <Label htmlFor="proof_of_residence">Proof of Residence *</Label>
+                  <div className="border-2 border-dashed border-border rounded-lg p-4 text-center">
+                    <input
+                      type="file"
+                      id="proof_of_residence"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      onChange={(e) => handleFileUpload(e, 'proof_of_residence')}
+                      className="hidden"
+                      disabled={uploading}
+                    />
+                    <label htmlFor="proof_of_residence" className="cursor-pointer">
+                      <Upload className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                      <p className="text-sm text-muted-foreground mb-1">
+                        {uploading ? 'Uploading...' : 'Click to upload proof of residence'}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        PDF, JPG, JPEG, PNG up to 10MB
+                      </p>
+                    </label>
+                    {formData.proof_of_residence_url && (
+                      <div className="mt-2">
+                        <p className="text-sm text-green-600">✓ Proof of residence uploaded</p>
+                        <a 
+                          href={formData.proof_of_residence_url} 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          className="text-sm text-blue-600 hover:underline"
+                        >
+                          View Document
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="cv">Curriculum Vitae (CV) / Resume *</Label>
+                  <div className="border-2 border-dashed border-border rounded-lg p-4 text-center">
+                    <input
+                      type="file"
+                      id="cv"
+                      accept=".pdf,.doc,.docx"
+                      onChange={(e) => handleFileUpload(e, 'cv')}
+                      className="hidden"
+                      disabled={uploadingCv}
+                    />
+                    <label htmlFor="cv" className="cursor-pointer">
+                      <FileText className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                      <p className="text-sm text-muted-foreground mb-1">
+                        {uploadingCv ? 'Uploading...' : 'Click to upload your CV'}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        PDF, DOC, DOCX accepted, up to 10MB
+                      </p>
+                    </label>
+                    {formData.cv_url && (
+                      <div className="mt-2">
+                        <p className="text-sm text-green-600">✓ CV uploaded</p>
+                        <a 
+                          href={formData.cv_url} 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          className="text-sm text-blue-600 hover:underline"
+                        >
+                          View CV
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ========== TRAINING & CERTIFICATIONS SECTION ========== */}
+          <div className="border rounded-lg overflow-hidden">
+            <button
+              type="button"
+              className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 transition-colors"
+              onClick={() => toggleSection('training')}
+            >
+              <div className="flex items-center gap-2">
+                <GraduationCap className="h-5 w-5 text-primary" />
+                <span className="font-semibold">Training & Certifications</span>
+                <Badge variant="secondary" className="ml-2">Recommended</Badge>
+              </div>
+              {expandedSections.training ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </button>
+            {expandedSections.training && (
+              <div className="p-4 space-y-4">
+                <div className="space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="first_aid"
+                      checked={formData.training_first_aid}
+                      onCheckedChange={(checked) => setFormData(prev => ({ ...prev, training_first_aid: !!checked }))}
+                    />
+                    <Label htmlFor="first_aid">First Aid Training</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="cpr"
+                      checked={formData.training_cpr}
+                      onCheckedChange={(checked) => setFormData(prev => ({ ...prev, training_cpr: !!checked }))}
+                    />
+                    <Label htmlFor="cpr">CPR Training</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="nanny_training"
+                      checked={formData.training_nanny}
+                      onCheckedChange={(checked) => setFormData(prev => ({ ...prev, training_nanny: !!checked }))}
+                    />
+                    <Label htmlFor="nanny_training">Foundational Nanny Training</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="child_dev"
+                      checked={formData.training_child_development}
+                      onCheckedChange={(checked) => setFormData(prev => ({ ...prev, training_child_development: !!checked }))}
+                    />
+                    <Label htmlFor="child_dev">Child Development Training</Label>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  These certifications help you stand out to families and can increase your hourly rate.
+                </p>
+              </div>
+            )}
           </div>
 
           <Button type="submit" className="w-full" disabled={submitting}>

@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
-import { User, MapPin, Phone, Mail, Upload, Save, Eye, FileText } from 'lucide-react';
+import { User, MapPin, Phone, Mail, Upload, Save, Eye, FileText, IdCard } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SOUTH_AFRICAN_CITIES } from '@/data/southAfricanCities';
 
@@ -52,6 +52,11 @@ interface NannyProfile {
   created_at: string;
   updated_at: string;
   cv_url: string;
+  id_document_url: string;  // NEW: ID/Passport document
+  nationality: string;       // NEW: Nationality field
+  emergency_contact_name: string;  // NEW
+  emergency_contact_relationship: string;  // NEW
+  emergency_contact_phone: string;  // NEW
 }
 
 interface ClientProfile {
@@ -80,13 +85,28 @@ const EXPERIENCE_DURATION_OPTIONS = [
   { label: '10+ years', value: 15 },
 ];
 
+// Nationality options
+const NATIONALITIES = [
+  'South African', 'Zimbabwean', 'Malawian', 'Namibian', 'Botswanan',
+  'Lesotho', 'Eswatini (Swaziland)', 'Mozambican', 'Zambian', 'Angolan',
+  'Nigerian', 'Ghanaian', 'Kenyan', 'Other African', 'British', 'German',
+  'Dutch', 'Portuguese', 'French', 'American', 'Other European', 'Other'
+];
+
+// Relationship options for emergency contact
+const RELATIONSHIP_OPTIONS = [
+  'Mother', 'Father', 'Sister', 'Brother', 'Spouse/Partner', 'Child',
+  'Aunt', 'Uncle', 'Cousin', 'Grandparent', 'Close Friend', 'Roommate',
+  'Other Family Member', 'Other'
+];
+
 export default function Profile() {
   const { user, userRole } = useAuth();
   const { toast } = useToast();
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [nannyProfile, setNannyProfile] = useState<NannyProfile | null>(null);
   const [clientProfile, setClientProfile] = useState<ClientProfile | null>(null);
-  const [uploading, setUploading] = useState({ proof: false, video: false, criminal: false, credit: false, cv: false });
+  const [uploading, setUploading] = useState({ proof: false, video: false, criminal: false, credit: false, cv: false, id: false });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -129,7 +149,12 @@ export default function Profile() {
             credit_check_status: nanny.credit_check_status || 'pending',
             academy_completed: nanny.academy_completed || false,
             profile_approved: nanny.profile_approved || false,
-            cv_url: nanny.cv_url || ''
+            cv_url: nanny.cv_url || '',
+            id_document_url: nanny.id_document_url || '',
+            nationality: nanny.nationality || '',
+            emergency_contact_name: nanny.emergency_contact_name || '',
+            emergency_contact_relationship: nanny.emergency_contact_relationship || '',
+            emergency_contact_phone: nanny.emergency_contact_phone || '',
           });
         }
       } else if (userRole === 'client') {
@@ -326,7 +351,7 @@ export default function Profile() {
     }
   };
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>, fileType: 'proof_of_residence' | 'criminal_check' | 'credit_check' | 'cv') => {
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>, fileType: 'proof_of_residence' | 'criminal_check' | 'credit_check' | 'cv' | 'id_document') => {
     const file = event.target.files?.[0];
     if (!file || !nannyProfile) return;
 
@@ -336,7 +361,10 @@ export default function Profile() {
     
     if (fileType === 'cv') {
       validTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
-      maxSize = 10 * 1024 * 1024; // 10MB for CV as well
+      maxSize = 10 * 1024 * 1024;
+    } else if (fileType === 'id_document') {
+      validTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
+      maxSize = 10 * 1024 * 1024;
     }
     
     if (!validTypes.includes(file.type)) {
@@ -344,6 +372,8 @@ export default function Profile() {
         title: "Invalid file type",
         description: fileType === 'cv' 
           ? "Please upload a PDF or Word document (.pdf, .doc, .docx)."
+          : fileType === 'id_document'
+          ? "Please upload a PDF, JPEG, or PNG file for your ID/Passport."
           : "Please upload a PDF, JPEG, or PNG file.",
         variant: "destructive"
       });
@@ -362,7 +392,8 @@ export default function Profile() {
 
     const uploadingKey = fileType === 'proof_of_residence' ? 'proof' : 
                         fileType === 'criminal_check' ? 'criminal' : 
-                        fileType === 'credit_check' ? 'credit' : 'cv';
+                        fileType === 'credit_check' ? 'credit' : 
+                        fileType === 'cv' ? 'cv' : 'id';
     
     setUploading(prev => ({ ...prev, [uploadingKey]: true }));
     
@@ -384,6 +415,9 @@ export default function Profile() {
         case 'cv':
           bucket = 'cv-documents';
           break;
+        case 'id_document':
+          bucket = 'id-documents';
+          break;
       }
 
       const { error: uploadError } = await supabase.storage
@@ -401,7 +435,7 @@ export default function Profile() {
       const publicUrl = data.publicUrl;
 
       const updateData: any = { 
-        [fileType === 'cv' ? 'cv_url' : `${fileType}_url`]: publicUrl 
+        [fileType === 'id_document' ? 'id_document_url' : `${fileType}_url`]: publicUrl 
       };
       
       if (fileType === 'criminal_check') {
@@ -466,7 +500,12 @@ export default function Profile() {
         profile_approved: false,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        cv_url: ''
+        cv_url: '',
+        id_document_url: '',
+        nationality: '',
+        emergency_contact_name: '',
+        emergency_contact_relationship: '',
+        emergency_contact_phone: '',
       });
     } else if (userRole === 'client' && !clientProfile) {
       setClientProfile({
@@ -688,6 +727,43 @@ export default function Profile() {
                     </div>
                   </div>
 
+                  {/* ID/Passport Upload Section - NEW */}
+                  <div>
+                    <Label htmlFor="id_document">ID / Passport</Label>
+                    <div className="border-2 border-dashed border-border rounded-lg p-4 text-center">
+                      <input
+                        type="file"
+                        id="id_document"
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        onChange={(e) => handleFileUpload(e, 'id_document')}
+                        className="hidden"
+                        disabled={uploading.id}
+                      />
+                      <label htmlFor="id_document" className="cursor-pointer">
+                        <IdCard className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                        <p className="text-sm text-muted-foreground mb-1">
+                          {uploading.id ? 'Uploading...' : 'Click to upload ID or Passport'}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          PDF, JPG, JPEG, PNG up to 10MB
+                        </p>
+                      </label>
+                      {nannyProfile.id_document_url && (
+                        <div className="mt-2">
+                          <p className="text-sm text-green-600">✓ ID/Passport uploaded</p>
+                          <a 
+                            href={nannyProfile.id_document_url} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="text-sm text-blue-600 hover:underline"
+                          >
+                            View Document
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
                   <div>
                     <Label htmlFor="proof_of_residence">Proof of Residence</Label>
                     <div className="border-2 border-dashed border-border rounded-lg p-4 text-center">
@@ -781,7 +857,7 @@ export default function Profile() {
                     </div>
                   </div>
 
-                  {/* CV Upload Section - NEW */}
+                  {/* CV Upload Section */}
                   <div>
                     <Label htmlFor="cv">Curriculum Vitae (CV) / Resume</Label>
                     <div className="border-2 border-dashed border-border rounded-lg p-4 text-center">
@@ -815,6 +891,69 @@ export default function Profile() {
                           </a>
                         </div>
                       )}
+                    </div>
+                  </div>
+
+                  {/* Nationality Field - NEW */}
+                  <div>
+                    <Label htmlFor="nationality">Nationality</Label>
+                    <Select 
+                      value={nannyProfile.nationality} 
+                      onValueChange={(value) => setNannyProfile({...nannyProfile, nationality: value})}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select your nationality" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {NATIONALITIES.map((nation) => (
+                          <SelectItem key={nation} value={nation}>{nation}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Emergency Contact Section - NEW */}
+                  <div className="border rounded-lg p-4 space-y-4">
+                    <h4 className="font-semibold text-md flex items-center gap-2">
+                      <User className="h-4 w-4" />
+                      Emergency Contact
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="emergency_contact_name">Contact Name</Label>
+                        <Input
+                          id="emergency_contact_name"
+                          value={nannyProfile.emergency_contact_name || ''}
+                          onChange={(e) => setNannyProfile({...nannyProfile, emergency_contact_name: e.target.value})}
+                          placeholder="Full name of emergency contact"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="emergency_contact_relationship">Relationship</Label>
+                        <Select 
+                          value={nannyProfile.emergency_contact_relationship} 
+                          onValueChange={(value) => setNannyProfile({...nannyProfile, emergency_contact_relationship: value})}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select relationship" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {RELATIONSHIP_OPTIONS.map((rel) => (
+                              <SelectItem key={rel} value={rel}>{rel}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="md:col-span-2">
+                        <Label htmlFor="emergency_contact_phone">Emergency Phone</Label>
+                        <Input
+                          id="emergency_contact_phone"
+                          type="tel"
+                          value={nannyProfile.emergency_contact_phone || ''}
+                          onChange={(e) => setNannyProfile({...nannyProfile, emergency_contact_phone: e.target.value})}
+                          placeholder="+27 82 123 4567"
+                        />
+                      </div>
                     </div>
                   </div>
 

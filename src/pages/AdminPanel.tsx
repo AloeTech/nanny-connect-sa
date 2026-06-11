@@ -1,4 +1,4 @@
-// pages/AdminPanel.tsx - PART 1
+// pages/AdminPanel.tsx
 import { useEffect, useState, useMemo } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
@@ -48,7 +48,11 @@ import {
   Home,
   Languages,
   GraduationCap,
-  Award
+  Award,
+  Globe,
+  IdCard,
+  Users as UsersIcon,
+  Download
 } from 'lucide-react';
 import {
   Dialog,
@@ -75,6 +79,11 @@ interface NannyProfile {
   interview_video_url: string;
   proof_of_residence_url: string;
   cv_url: string;
+  id_document_url: string;
+  nationality: string | null;
+  emergency_contact_name: string | null;
+  emergency_contact_relationship: string | null;
+  emergency_contact_phone: string | null;
   training_first_aid: boolean;
   training_nanny: boolean;
   training_cpr: boolean;
@@ -188,6 +197,27 @@ const calculateAge = (dateOfBirth: string | null): number | null => {
   } catch (error) {
     console.error('Error calculating age:', error);
     return null;
+  }
+};
+
+// Add this helper function near calculateAge function
+const getVideoMimeType = (url: string): string => {
+  const extension = url.split('.').pop()?.toLowerCase();
+  switch (extension) {
+    case 'mp4':
+      return 'video/mp4';
+    case 'webm':
+      return 'video/webm';
+    case 'ogg':
+      return 'video/ogg';
+    case 'mov':
+      return 'video/quicktime';
+    case 'avi':
+      return 'video/x-msvideo';
+    case 'mkv':
+      return 'video/x-matroska';
+    default:
+      return 'video/mp4';
   }
 };
 
@@ -309,6 +339,11 @@ export default function AdminPanel() {
         ...nanny,
         proof_of_residence_status: nanny.proof_of_residence_status || (nanny.proof_of_residence_url ? 'pending' : 'none'),
         cv_url: nanny.cv_url || null,
+        id_document_url: nanny.id_document_url || null,
+        nationality: nanny.nationality || null,
+        emergency_contact_name: nanny.emergency_contact_name || null,
+        emergency_contact_relationship: nanny.emergency_contact_relationship || null,
+        emergency_contact_phone: nanny.emergency_contact_phone || null,
       })) as NannyProfile[];
       setNannies(normalizedNannies);
 
@@ -732,7 +767,9 @@ export default function AdminPanel() {
           <TabsTrigger value="reviews">Reviews & Complaints</TabsTrigger>
           <TabsTrigger value="academy">Academy</TabsTrigger>
           <TabsTrigger value="payments">Payments</TabsTrigger>
-        </TabsList>           {/* Enhanced Nannies Tab with Complete Profile View */}
+        </TabsList>
+
+        {/* Enhanced Nannies Tab with Complete Profile View */}
         <TabsContent value="nannies" className="space-y-6">
           <Card>
             <CardHeader>
@@ -796,6 +833,7 @@ export default function AdminPanel() {
                                 {nanny.criminal_check_status === 'approved' && <Badge className="bg-green-600">Criminal ✓</Badge>}
                                 {nanny.credit_check_status === 'approved' && <Badge className="bg-green-600">Credit ✓</Badge>}
                                 {nanny.cv_url && <Badge className="bg-purple-600">CV ✓</Badge>}
+                                {nanny.id_document_url && <Badge className="bg-indigo-600">ID ✓</Badge>}
                               </div>
                               <Button variant="ghost" size="icon" className="ml-2 shrink-0">
                                 {isExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
@@ -823,6 +861,12 @@ export default function AdminPanel() {
                                       {profile.phone && <span className="flex items-center gap-1"><Phone className="h-4 w-4" />{profile.phone}</span>}
                                       <span className="flex items-center gap-1"><MapPin className="h-4 w-4" />{profile.suburb ? `${profile.suburb}, ` : ''}{profile.city || 'No location'}</span>
                                     </div>
+                                    {nanny.nationality && (
+                                      <div className="flex items-center gap-1 mt-1 text-sm">
+                                        <Globe className="h-3 w-3 text-muted-foreground" />
+                                        <span className="text-muted-foreground">{nanny.nationality}</span>
+                                      </div>
+                                    )}
                                     {nanny.average_rating && (
                                       <div className="flex items-center gap-2 mt-2">
                                         <div className="flex">
@@ -867,10 +911,23 @@ export default function AdminPanel() {
                                 <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
                                   <div><p className="text-xs text-muted-foreground">Full Name</p><p className="font-medium">{profile.first_name} {profile.last_name}</p></div>
                                   <div><p className="text-xs text-muted-foreground">Date of Birth</p><p className="font-medium">{nanny.date_of_birth ? new Date(nanny.date_of_birth).toLocaleDateString() : 'Not provided'}{age && ` (${age} years)`}</p></div>
+                                  <div><p className="text-xs text-muted-foreground">Nationality</p><p className="font-medium">{nanny.nationality || 'Not specified'}</p></div>
                                   <div><p className="text-xs text-muted-foreground">Location</p><p className="font-medium">{profile.city}{profile.suburb ? `, ${profile.suburb}` : ''}{profile.town ? `, ${profile.town}` : ''}</p></div>
                                   <div><p className="text-xs text-muted-foreground">Email</p><p className="font-medium">{profile.email}</p></div>
                                   <div><p className="text-xs text-muted-foreground">Phone</p><p className="font-medium">{profile.phone || 'Not provided'}</p></div>
                                   <div><p className="text-xs text-muted-foreground">Accommodation</p><p className="font-medium capitalize">{nanny.accommodation_preference?.replace('_', ' ') || 'Not specified'}</p></div>
+                                </div>
+                              </div>
+
+                              {/* Emergency Contact Section */}
+                              <div className="border rounded-lg overflow-hidden">
+                                <div className="bg-gray-50 px-4 py-2 border-b">
+                                  <h4 className="font-semibold flex items-center gap-2"><UsersIcon className="h-4 w-4" /> Emergency Contact</h4>
+                                </div>
+                                <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                                  <div><p className="text-xs text-muted-foreground">Contact Name</p><p className="font-medium">{nanny.emergency_contact_name || 'Not specified'}</p></div>
+                                  <div><p className="text-xs text-muted-foreground">Relationship</p><p className="font-medium">{nanny.emergency_contact_relationship || 'Not specified'}</p></div>
+                                  <div><p className="text-xs text-muted-foreground">Phone</p><p className="font-medium">{nanny.emergency_contact_phone || 'Not specified'}</p></div>
                                 </div>
                               </div>
 
@@ -984,6 +1041,17 @@ export default function AdminPanel() {
                                     ) : (<p className="text-sm text-muted-foreground mt-2">Not uploaded</p>)}
                                   </div>
 
+                                  {/* ID / Passport */}
+                                  <div className="border rounded-lg p-3">
+                                    <p className="font-medium text-sm flex items-center gap-2"><IdCard className="h-4 w-4 text-indigo-500" /> ID / Passport</p>
+                                    {nanny.id_document_url ? (
+                                      <div className="mt-2">
+                                        <Badge variant="default" className="bg-green-500">UPLOADED</Badge>
+                                        <div className="mt-2"><a href={nanny.id_document_url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline flex items-center gap-1"><Eye className="h-3 w-3" /> View Document</a></div>
+                                      </div>
+                                    ) : (<p className="text-sm text-muted-foreground mt-2">Not uploaded</p>)}
+                                  </div>
+
                                   {/* CV / Resume */}
                                   <div className="border rounded-lg p-3">
                                     <p className="font-medium text-sm flex items-center gap-2"><FileText className="h-4 w-4 text-green-500" /> CV / Resume</p>
@@ -995,19 +1063,87 @@ export default function AdminPanel() {
                                     ) : (<p className="text-sm text-muted-foreground mt-2">Not uploaded</p>)}
                                   </div>
 
-                                  {/* Interview Video */}
-                                  <div className="border rounded-lg p-3">
-                                    <p className="font-medium text-sm flex items-center gap-2"><Video className="h-4 w-4 text-red-500" /> Interview Video</p>
-                                    {nanny.interview_video_url ? (
-                                      <div className="mt-2">
-                                        <Badge variant="default" className="bg-green-500">UPLOADED</Badge>
-                                        <div className="mt-2">
-                                          <video controls src={nanny.interview_video_url} className="w-full h-24 rounded object-cover" preload="metadata" />
-                                          <a href={nanny.interview_video_url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline flex items-center gap-1 mt-1"><Eye className="h-3 w-3" /> Open in new tab</a>
-                                        </div>
-                                      </div>
-                                    ) : (<p className="text-sm text-muted-foreground mt-2">Not uploaded</p>)}
-                                  </div>
+                                  {/* Interview Video - Enhanced with PiP support */}
+<div className="border rounded-lg p-3">
+  <p className="font-medium text-sm flex items-center gap-2"><Video className="h-4 w-4 text-red-500" /> Interview Video</p>
+  {nanny.interview_video_url ? (
+    <div className="mt-2">
+      <Badge variant="default" className="bg-green-500 mb-2">UPLOADED</Badge>
+      
+      {/* Video container with better display */}
+      <div className="relative bg-black rounded-lg overflow-hidden" style={{ minHeight: '200px' }}>
+        <video 
+          id={`video-${nanny.id}`}
+          controls 
+          className="w-full rounded-lg"
+          style={{ maxHeight: '400px', minHeight: '250px' }}
+          preload="metadata"
+          playsInline
+        >
+          <source src={nanny.interview_video_url} type="video/mp4" />
+          Your browser does not support the video tag.
+        </video>
+      </div>
+      
+      {/* Action buttons */}
+      <div className="flex flex-wrap gap-2 mt-3">
+        <Button 
+          size="sm" 
+          variant="outline"
+          onClick={() => {
+            const video = document.getElementById(`video-${nanny.id}`) as HTMLVideoElement;
+            if (video) {
+              // Enter Picture-in-Picture mode
+              if (document.pictureInPictureEnabled) {
+                if (!document.pictureInPictureElement) {
+                  video.requestPictureInPicture().catch(err => {
+                    console.error('PiP error:', err);
+                    // Fallback: open in new tab
+                    window.open(nanny.interview_video_url, '_blank');
+                  });
+                } else {
+                  document.exitPictureInPicture();
+                }
+              } else {
+                // Fallback: open in new tab
+                window.open(nanny.interview_video_url, '_blank');
+              }
+            }
+          }}
+          className="bg-blue-600 hover:bg-blue-700 text-white"
+        >
+          <Video className="h-3 w-3 mr-1" />
+          Picture-in-Picture Mode
+        </Button>
+        
+        <a 
+          href={nanny.interview_video_url} 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-8 px-3"
+        >
+          <Eye className="h-3 w-3 mr-1" />
+          Open in new tab
+        </a>
+        
+        <a 
+          href={nanny.interview_video_url} 
+          download
+          className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-8 px-3"
+        >
+          <Download className="h-3 w-3 mr-1" />
+          Download
+        </a>
+      </div>
+      
+      <p className="text-xs text-muted-foreground mt-2">
+        💡 Tip: Click "Picture-in-Picture Mode" for the best viewing experience
+      </p>
+    </div>
+  ) : (
+    <p className="text-sm text-muted-foreground mt-2">Not uploaded</p>
+  )}
+</div>
                                 </div>
                               </div>
 

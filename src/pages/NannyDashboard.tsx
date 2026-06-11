@@ -9,7 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { 
   CheckCircle, Clock, Upload, Video, User, MapPin, Languages, 
   GraduationCap, Award, Heart, FileText, Eye, Calendar, DollarSign, Briefcase, Home,
-  AlertTriangle  // ADDED THIS
+  AlertTriangle, Globe, IdCard, Users, Phone
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import {
@@ -47,6 +47,12 @@ interface NannyProfile {
   cv_url: string | null;
   employment_type: string | null;
   average_rating: number | null;
+  // NEW FIELDS
+  nationality: string | null;
+  id_document_url: string | null;
+  emergency_contact_name: string | null;
+  emergency_contact_relationship: string | null;
+  emergency_contact_phone: string | null;
 }
 
 interface UserProfile {
@@ -117,22 +123,36 @@ const calculateAge = (dateOfBirth: string | null): number | null => {
   }
 };
 
-// Helper function to get missing requirements
+// Helper function to get missing requirements - UPDATED with new fields
 const getMissingRequirements = (nannyProfile: NannyProfile | null, userProfile: UserProfile | null): string[] => {
   const missing: string[] = [];
   
+  // Personal Information
   if (!nannyProfile?.date_of_birth) missing.push('Date of Birth');
+  if (!nannyProfile?.nationality) missing.push('Nationality');
+  if (!userProfile?.profile_picture_url) missing.push('Profile Picture');
+  
+  // Professional Information
   if (!nannyProfile?.bio) missing.push('Bio / About Me');
   if (!nannyProfile?.languages || nannyProfile.languages.length === 0) missing.push('Languages Spoken');
   if (!nannyProfile?.experience_duration && nannyProfile?.experience_duration !== 0) missing.push('Experience Duration');
   if (!nannyProfile?.hourly_rate) missing.push('Hourly Rate');
   if (!nannyProfile?.education_level) missing.push('Education Level');
+  
+  // Documents
   if (!nannyProfile?.criminal_check_url) missing.push('Criminal Check Document');
   if (!nannyProfile?.credit_check_url) missing.push('Credit Check Document');
   if (!nannyProfile?.proof_of_residence_url) missing.push('Proof of Residence');
   if (!nannyProfile?.cv_url) missing.push('CV / Resume');
+  if (!nannyProfile?.id_document_url) missing.push('ID / Passport Document');
   if (!nannyProfile?.interview_video_url) missing.push('Introduction Video');
-  if (!userProfile?.profile_picture_url) missing.push('Profile Picture');
+  
+  // Emergency Contact
+  if (!nannyProfile?.emergency_contact_name) missing.push('Emergency Contact Name');
+  if (!nannyProfile?.emergency_contact_relationship) missing.push('Emergency Contact Relationship');
+  if (!nannyProfile?.emergency_contact_phone) missing.push('Emergency Contact Phone');
+  
+  // Training
   if (!nannyProfile?.academy_completed) missing.push('Academy Training Completion');
   
   return missing;
@@ -172,7 +192,7 @@ export default function NannyDashboard() {
   const [academyProgress, setAcademyProgress] = useState<AcademyProgress>({ total_videos: 0, completed_videos: 0, progress_percentage: 0 });
   const [interests, setInterests] = useState<Interest[]>([]);
   const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState({ cv: false, criminal: false, credit: false, proof: false, video: false, picture: false });
+  const [uploading, setUploading] = useState({ cv: false, criminal: false, credit: false, proof: false, video: false, picture: false, id: false });
 
   // Dialog state
   const [isVideoDialogOpen, setIsVideoDialogOpen] = useState(false);
@@ -203,6 +223,11 @@ export default function NannyDashboard() {
         credit_check_status: nannyData.credit_check_status as 'pending' | 'approved' | 'rejected' || 'pending',
         proof_of_residence_status: ('proof_of_residence_status' in nannyData ? (nannyData as any).proof_of_residence_status as 'pending' | 'approved' | 'rejected' : 'pending'),
         cv_url: nannyData.cv_url || null,
+        nationality: nannyData.nationality || null,
+        id_document_url: nannyData.id_document_url || null,
+        emergency_contact_name: nannyData.emergency_contact_name || null,
+        emergency_contact_relationship: nannyData.emergency_contact_relationship || null,
+        emergency_contact_phone: nannyData.emergency_contact_phone || null,
       };
       setNannyProfile(safeNannyData);
 
@@ -279,7 +304,7 @@ export default function NannyDashboard() {
     }
   };
 
-  const handleFileUpload = async (file: File, type: 'criminal_check' | 'credit_check' | 'interview_video' | 'profile_picture' | 'intro_video' | 'proof_of_residence' | 'cv') => {
+  const handleFileUpload = async (file: File, type: 'criminal_check' | 'credit_check' | 'interview_video' | 'profile_picture' | 'intro_video' | 'proof_of_residence' | 'cv' | 'id_document') => {
     // Validate file type for CV
     if (type === 'cv') {
       const validCvTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
@@ -300,12 +325,34 @@ export default function NannyDashboard() {
         return;
       }
     }
+    
+    // Validate file type for ID document
+    if (type === 'id_document') {
+      const validIdTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
+      if (!validIdTypes.includes(file.type)) {
+        toast({
+          title: "Invalid file type",
+          description: "Please upload a PDF, JPEG, or PNG file for your ID/Passport.",
+          variant: "destructive"
+        });
+        return;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        toast({
+          title: "File too large",
+          description: "Please upload a file smaller than 10MB.",
+          variant: "destructive"
+        });
+        return;
+      }
+    }
 
     const uploadingKey = type === 'cv' ? 'cv' :
                         type === 'criminal_check' ? 'criminal' :
                         type === 'credit_check' ? 'credit' :
                         type === 'proof_of_residence' ? 'proof' :
-                        type === 'profile_picture' ? 'picture' : 'video';
+                        type === 'profile_picture' ? 'picture' :
+                        type === 'id_document' ? 'id' : 'video';
     
     setUploading(prev => ({ ...prev, [uploadingKey]: true }));
     
@@ -329,6 +376,9 @@ export default function NannyDashboard() {
           break;
         case 'cv':
           bucketName = 'cv-documents';
+          break;
+        case 'id_document':
+          bucketName = 'id-documents';
           break;
         default:
           bucketName = 'interview-videos';
@@ -364,6 +414,8 @@ export default function NannyDashboard() {
           updateData.proof_of_residence_status = 'pending';
         } else if (type === 'cv') {
           updateData.cv_url = fileUrl;
+        } else if (type === 'id_document') {
+          updateData.id_document_url = fileUrl;
         }
 
         const { error: updateError } = await supabase
@@ -525,6 +577,13 @@ export default function NannyDashboard() {
                   }
                 </div>
                 <div className="flex items-center justify-between">
+                  <span>ID / Passport</span>
+                  {nannyProfile?.id_document_url ? 
+                    <Badge variant="default" className="bg-green-500"><CheckCircle className="h-3 w-3 mr-1" />Uploaded</Badge> : 
+                    <Badge variant="outline">Not Uploaded</Badge>
+                  }
+                </div>
+                <div className="flex items-center justify-between">
                   <span>CV / Resume</span>
                   {nannyProfile?.cv_url ? 
                     <Badge variant="default" className="bg-green-500"><CheckCircle className="h-3 w-3 mr-1" />Uploaded</Badge> : 
@@ -605,7 +664,7 @@ export default function NannyDashboard() {
             </CardContent>
           </Card>
 
-          {/* Profile Information - Enhanced */}
+          {/* Profile Information - Enhanced with new fields */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2"><User className="h-5 w-5" /> Profile Information</CardTitle>
@@ -625,6 +684,12 @@ export default function NannyDashboard() {
                     <Calendar className="h-3 w-3" /> Age
                   </label>
                   <p>{age ? `${age} years` : 'Not specified'}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+                    <Globe className="h-3 w-3" /> Nationality
+                  </label>
+                  <p>{nannyProfile?.nationality || 'Not specified'}</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-muted-foreground flex items-center gap-1">
@@ -665,6 +730,27 @@ export default function NannyDashboard() {
                     <Languages className="h-3 w-3" /> Languages
                   </label>
                   <p>{nannyProfile?.languages?.join(', ') || 'Not specified'}</p>
+                </div>
+              </div>
+
+              {/* Emergency Contact Section - NEW */}
+              <div className="border-t pt-4 mt-2">
+                <label className="text-sm font-medium text-muted-foreground flex items-center gap-1 mb-2">
+                  <Users className="h-3 w-3" /> Emergency Contact
+                </label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Name</p>
+                    <p className="text-sm">{nannyProfile?.emergency_contact_name || 'Not specified'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Relationship</p>
+                    <p className="text-sm">{nannyProfile?.emergency_contact_relationship || 'Not specified'}</p>
+                  </div>
+                  <div className="md:col-span-2">
+                    <p className="text-xs text-muted-foreground flex items-center gap-1"><Phone className="h-3 w-3" /> Phone</p>
+                    <p className="text-sm">{nannyProfile?.emergency_contact_phone || 'Not specified'}</p>
+                  </div>
                 </div>
               </div>
 
@@ -717,6 +803,23 @@ export default function NannyDashboard() {
                 </div>
               )}
 
+              {/* ID Document Link if uploaded - NEW */}
+              {nannyProfile?.id_document_url && (
+                <div className="mt-2 p-3 bg-blue-50 rounded-md">
+                  <label className="text-sm font-medium text-blue-800 flex items-center gap-1">
+                    <IdCard className="h-4 w-4" /> ID / Passport
+                  </label>
+                  <a 
+                    href={nannyProfile.id_document_url} 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="text-sm text-blue-600 hover:underline flex items-center gap-1 mt-1"
+                  >
+                    <Eye className="h-3 w-3" /> View uploaded ID/Passport
+                  </a>
+                </div>
+              )}
+
               <Link to="/profile"><Button variant="outline" className="w-full">Edit Full Profile</Button></Link>
             </CardContent>
           </Card>
@@ -759,6 +862,51 @@ export default function NannyDashboard() {
                   <video controls className="w-full max-h-32 rounded" src={nannyProfile.interview_video_url}>
                     Your browser does not support the video tag.
                   </video>
+                </div>
+              )}
+
+              {/* ID DOCUMENT UPLOAD BUTTON - NEW */}
+              {!nannyProfile?.id_document_url ? (
+                <div>
+                  <input
+                    type="file"
+                    id="id-upload"
+                    accept=".pdf,.jpg,.jpeg,.png"
+                    className="hidden"
+                    onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0], 'id_document')}
+                  />
+                  <Button 
+                    variant="outline" 
+                    className="w-full justify-start"
+                    onClick={() => document.getElementById('id-upload')?.click()}
+                    disabled={uploading.id}
+                  >
+                    {uploading.id ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2"></div>
+                        Uploading...
+                      </>
+                    ) : (
+                      <>
+                        <IdCard className="h-4 w-4 mr-2" />
+                        Upload ID / Passport
+                      </>
+                    )}
+                  </Button>
+                </div>
+              ) : (
+                <div className="p-3 bg-blue-50 rounded-md">
+                  <p className="text-sm text-blue-800 font-medium flex items-center gap-1">
+                    <CheckCircle className="h-4 w-4" /> ID/Passport Uploaded
+                  </p>
+                  <a 
+                    href={nannyProfile.id_document_url} 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="text-sm text-blue-600 hover:underline flex items-center gap-1 mt-1"
+                  >
+                    <Eye className="h-3 w-3" /> View Document
+                  </a>
                 </div>
               )}
 

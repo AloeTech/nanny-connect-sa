@@ -217,29 +217,34 @@ const cleaningTypes = [
   { value: 'full_time', label: 'Full-time Cleaning', fee: 200, description: 'Sourcing fee - arrange directly with cleaner' }
 ];
 
-const getCleanerProfileInfo = (cleaner: Cleaner) => {
+// Helper function to get cleaner profile info with privacy - ONLY FIRST NAME visible until paid
+const getCleanerProfileInfo = (cleaner: Cleaner, showFullName: boolean = false) => {
   if (cleaner.profiles) {
     const p = Array.isArray(cleaner.profiles) ? cleaner.profiles[0] : cleaner.profiles;
     return {
-      first_name: p.first_name || cleaner.first_name || 'No name',
-      last_name: p.last_name || cleaner.last_name || '',
+      first_name: showFullName ? (p.first_name || cleaner.first_name || 'No name') : (p.first_name || cleaner.first_name || 'No name'),
+      last_name: showFullName ? (p.last_name || cleaner.last_name || '') : '', // HIDE LAST NAME unless paid
+      fullName: showFullName ? `${p.first_name || cleaner.first_name || 'No name'} ${p.last_name || cleaner.last_name || ''}` : (p.first_name || cleaner.first_name || 'No name'),
       city: p.city || cleaner.city || 'Location not specified',
       suburb: p.suburb || cleaner.suburb || '',
       town: p.town || '',
       profile_picture_url: p.profile_picture_url || null,
-      email: p.email || '',
-      phone: p.phone || cleaner.phone || null
+      email: showFullName ? (p.email || '') : '', // HIDE EMAIL unless paid
+      phone: showFullName ? (p.phone || cleaner.phone || null) : null, // HIDE PHONE unless paid
+      showFullDetails: showFullName
     };
   }
   return {
-    first_name: cleaner.first_name || 'No name',
-    last_name: cleaner.last_name || '',
+    first_name: showFullName ? (cleaner.first_name || 'No name') : (cleaner.first_name || 'No name'),
+    last_name: showFullName ? (cleaner.last_name || '') : '',
+    fullName: showFullName ? `${cleaner.first_name || 'No name'} ${cleaner.last_name || ''}` : (cleaner.first_name || 'No name'),
     city: cleaner.city || 'Location not specified',
     suburb: cleaner.suburb || '',
     town: '',
     profile_picture_url: null,
-    email: '',
-    phone: cleaner.phone || null
+    email: showFullName ? '' : '',
+    phone: showFullName ? (cleaner.phone || null) : null,
+    showFullDetails: showFullName
   };
 };
 
@@ -356,7 +361,7 @@ const processPaymentSuccess = async (interestId: string, transactionId: string, 
     }
 
     // Get the cleaning type from interest message or default
-    const cleaningType = 'once_off'; // You might want to store this in the interest table
+    const cleaningType = 'once_off';
     const feeAmount = cleaningTypes.find(t => t.value === cleaningType)?.fee || 200;
 
     // Create payment record
@@ -660,43 +665,43 @@ export default function FindCleaner() {
   }, [user, hasRole, refreshCount]);
 
   const fetchCleaners = async () => {
-  try {
-    const { data, error } = await supabase
-      .from('nannies')
-      .select(`
-        *,
-        profiles!inner(
-          id,
-          email,
-          first_name,
-          last_name,
-          city,
-          suburb,
-          town,
-          profile_picture_url,
-          phone,
-          user_type
-        )
-      `)
-      .in('experience_type', ['cleaning', 'both'])
-      .eq('profile_approved', true)
-      .order('average_rating', { ascending: false, nullsFirst: false }); // Sort by rating
+    try {
+      const { data, error } = await supabase
+        .from('nannies')
+        .select(`
+          *,
+          profiles!inner(
+            id,
+            email,
+            first_name,
+            last_name,
+            city,
+            suburb,
+            town,
+            profile_picture_url,
+            phone,
+            user_type
+          )
+        `)
+        .in('experience_type', ['cleaning', 'both'])
+        .eq('profile_approved', true)
+        .order('average_rating', { ascending: false, nullsFirst: false });
 
-    if (error) throw error;
-    
-    console.log('Fetched cleaners data with average_rating:', data);
-    setCleaners(data || []);
-  } catch (error) {
-    console.error('Error fetching cleaners:', error);
-    toast({
-      title: "Error",
-      description: "Failed to load cleaners",
-      variant: "destructive"
-    });
-  } finally {
-    setLoading(false);
-  }
-};
+      if (error) throw error;
+      
+      console.log('Fetched cleaners data with average_rating:', data);
+      setCleaners(data || []);
+    } catch (error) {
+      console.error('Error fetching cleaners:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load cleaners",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchExistingInterests = async () => {
     if (!user) return;
@@ -825,7 +830,7 @@ export default function FindCleaner() {
 
   const sendInterestNotificationEmails = async (cleaner: Cleaner, clientProfile: any, message: string) => {
     try {
-      const cleanerProfile = getCleanerProfileInfo(cleaner);
+      const cleanerProfile = getCleanerProfileInfo(cleaner, false); // Don't show full details
       
       const cleanerEmailData = {
         to: cleanerProfile.email,
@@ -934,7 +939,7 @@ export default function FindCleaner() {
         return;
       }
 
-      const cleanerProfile = getCleanerProfileInfo(selectedCleaner);
+      const cleanerProfile = getCleanerProfileInfo(selectedCleaner, false);
       
       const { error } = await supabase
         .from('interests')
@@ -1046,7 +1051,7 @@ export default function FindCleaner() {
         return;
       }
 
-      const cleanerProfile = getCleanerProfileInfo(cleaner);
+      const cleanerProfile = getCleanerProfileInfo(cleaner, false);
       const selectedCleaningTypeObj = cleaningTypes.find(t => t.value === cleaningType);
       const timestamp = Date.now();
       const txRef = `cleaner-${interestId}-${timestamp}`;
@@ -1128,89 +1133,89 @@ export default function FindCleaner() {
   };
 
   const submitReview = async () => {
-  if (!selectedCleaner || !rating || !user) return;
-  setSubmittingReview(true);
-  try {
-    const { data: client } = await supabase
-      .from('clients')
-      .select('id')
-      .eq('user_id', user.id)
-      .single();
+    if (!selectedCleaner || !rating || !user) return;
+    setSubmittingReview(true);
+    try {
+      const { data: client } = await supabase
+        .from('clients')
+        .select('id')
+        .eq('user_id', user.id)
+        .single();
 
-    if (!client) throw new Error('Client not found');
+      if (!client) throw new Error('Client not found');
 
-    // Check if client has already reviewed this cleaner
-    const { data: existingReview } = await supabase
-      .from('reviews')
-      .select('id')
-      .eq('nanny_id', selectedCleaner.id)
-      .eq('client_id', client.id)
-      .single();
+      // Check if client has already reviewed this cleaner
+      const { data: existingReview } = await supabase
+        .from('reviews')
+        .select('id')
+        .eq('nanny_id', selectedCleaner.id)
+        .eq('client_id', client.id)
+        .single();
 
-    if (existingReview) {
-      throw new Error('You have already reviewed this cleaner');
-    }
+      if (existingReview) {
+        throw new Error('You have already reviewed this cleaner');
+      }
 
-    // Insert review
-    const { error: reviewError } = await supabase
-      .from('reviews')
-      .insert({
-        nanny_id: selectedCleaner.id,
-        client_id: client.id,
-        rating,
-        complaint_text: review.trim() || null,
-        created_at: new Date().toISOString()
+      // Insert review
+      const { error: reviewError } = await supabase
+        .from('reviews')
+        .insert({
+          nanny_id: selectedCleaner.id,
+          client_id: client.id,
+          rating,
+          complaint_text: review.trim() || null,
+          created_at: new Date().toISOString()
+        });
+
+      if (reviewError) throw reviewError;
+
+      // The trigger will automatically update the average_rating in nannies table
+      
+      // Notify admin about the review
+      const { data: clientProfile } = await supabase
+        .from('profiles')
+        .select('first_name, last_name, email')
+        .eq('id', user.id)
+        .single();
+
+      const cleanerProfile = getCleanerProfileInfo(selectedCleaner, false);
+
+      if (clientProfile) {
+        await sendReviewNotificationEmail({
+          to: 'admin@nannyplacementssouthafrica.co.za',
+          client_name: `${clientProfile.first_name} ${clientProfile.last_name || ''}`,
+          client_email: clientProfile.email,
+          cleaner_name: `${cleanerProfile.first_name} ${cleanerProfile.last_name || ''}`,
+          rating: rating,
+          review_text: review.trim() || 'No review text provided'
+        }).catch(err => console.error('Review notification email failed:', err));
+      }
+
+      toast({
+        title: "Thank You!",
+        description: "Your review has been submitted successfully."
       });
 
-    if (reviewError) throw reviewError;
+      // Refresh cleaner data to show updated rating
+      fetchCleaners();
+      setRating(0);
+      setReview('');
+      setSelectedCleaner(null);
 
-    // The trigger will automatically update the average_rating in nannies table
-    
-    // Notify admin about the review
-    const { data: clientProfile } = await supabase
-      .from('profiles')
-      .select('first_name, last_name, email')
-      .eq('id', user.id)
-      .single();
-
-    const cleanerProfile = getCleanerProfileInfo(selectedCleaner);
-
-    if (clientProfile) {
-      await sendReviewNotificationEmail({
-        to: 'admin@nannyplacementssouthafrica.co.za',
-        client_name: `${clientProfile.first_name} ${clientProfile.last_name || ''}`,
-        client_email: clientProfile.email,
-        cleaner_name: `${cleanerProfile.first_name} ${cleanerProfile.last_name || ''}`,
-        rating: rating,
-        review_text: review.trim() || 'No review text provided'
-      }).catch(err => console.error('Review notification email failed:', err));
+    } catch (error: any) {
+      console.error('Error submitting review:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to submit review",
+        variant: "destructive"
+      });
+    } finally {
+      setSubmittingReview(false);
     }
-
-    toast({
-      title: "Thank You!",
-      description: "Your review has been submitted successfully."
-    });
-
-    // Refresh cleaner data to show updated rating
-    fetchCleaners();
-    setRating(0);
-    setReview('');
-    setSelectedCleaner(null);
-
-  } catch (error: any) {
-    console.error('Error submitting review:', error);
-    toast({
-      title: "Error",
-      description: error.message || "Failed to submit review",
-      variant: "destructive"
-    });
-  } finally {
-    setSubmittingReview(false);
-  }
-};
+  };
 
   const filteredCleaners = cleaners.filter(cleaner => {
-    const cleanerProfile = getCleanerProfileInfo(cleaner);
+    const cleanerProfile = getCleanerProfileInfo(cleaner, false);
     
     if (filters.city && !cleanerProfile.city?.toLowerCase().includes(filters.city.toLowerCase())) {
       return false;
@@ -1334,27 +1339,23 @@ export default function FindCleaner() {
 
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredCleaners.map((cleaner) => {
-          const cleanerProfile = getCleanerProfileInfo(cleaner);
+          const cleanerProfile = getCleanerProfileInfo(cleaner, false); // Only show first name until paid
           const interest = getInterestStatusForCleaner(cleaner.id);
           const hasInterest = !!interest;
           const isApproved = interest ? isInterestApprovedByCleaner(interest) : false;
           const isPaid = interest ? isPaymentCompleted(interest) : false;
           
-          console.log(`Cleaner ${cleaner.id}:`, { 
-            hasInterest, 
-            isApproved, 
-            isPaid, 
-            payment_status: interest?.payment_status,
-            status: interest?.status
-          });
+          // Determine if we should show full name (only after payment)
+          const showFullName = isPaid;
+          const displayProfile = getCleanerProfileInfo(cleaner, showFullName);
 
           return (
             <Card key={cleaner.id} className="hover:shadow-lg transition-shadow">
               <CardContent className="p-6">
                 <div className="flex items-center gap-4 mb-4">
-                  {cleanerProfile.profile_picture_url ? (
+                  {displayProfile.profile_picture_url ? (
                     <img 
-                      src={cleanerProfile.profile_picture_url}
+                      src={displayProfile.profile_picture_url}
                       alt="Profile"
                       className="w-16 h-16 rounded-full object-cover"
                     />
@@ -1364,10 +1365,11 @@ export default function FindCleaner() {
                     </div>
                   )}
                   <div className="flex-1">
-                    <h3 className="text-lg font-semibold">{cleanerProfile.first_name}</h3>
+                    {/* ONLY FIRST NAME shown until paid */}
+                    <h3 className="text-lg font-semibold">{displayProfile.first_name}</h3>
                     <p className="text-sm text-muted-foreground flex items-center gap-1">
                       <MapPin className="h-3 w-3" />
-                      {cleanerProfile.city}{cleanerProfile.suburb ? `, ${cleanerProfile.suburb}` : ''}
+                      {displayProfile.city}{displayProfile.suburb ? `, ${displayProfile.suburb}` : ''}
                     </p>
                     {cleaner.employment_type && (
                       <p className="text-xs text-muted-foreground capitalize mt-1">
@@ -1375,26 +1377,27 @@ export default function FindCleaner() {
                       </p>
                     )}
                     {cleaner.average_rating && (
-                    <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1">
                         <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
                         <span className="text-sm font-medium">
-                        {cleaner.average_rating.toFixed(1)}
-                        {cleaner.review_count && (
+                          {cleaner.average_rating.toFixed(1)}
+                          {cleaner.review_count && (
                             <span className="text-xs text-muted-foreground ml-1">
-                            ({cleaner.review_count})
+                              ({cleaner.review_count})
                             </span>
-                        )}
+                          )}
                         </span>
-                    </div>
+                      </div>
                     )}
                   </div>
                 </div>
 
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="text-xl font-semibold">{cleanerProfile.first_name} {cleanerProfile.last_name}</h3>
+                    {/* ONLY FIRST NAME shown until paid */}
+                    <h3 className="text-xl font-semibold">{displayProfile.first_name}</h3>
                     <p className="text-muted-foreground">
-                      {cleanerProfile.city}{cleanerProfile.town ? `, ${cleanerProfile.town}` : ''}
+                      {displayProfile.city}{displayProfile.town ? `, ${displayProfile.town}` : ''}
                     </p>
                     {cleaner.hourly_rate && (
                       <p className="text-sm font-medium mt-1">R{cleaner.hourly_rate}/hour</p>
@@ -1498,18 +1501,21 @@ export default function FindCleaner() {
       <Dialog open={!!selectedCleaner} onOpenChange={() => setSelectedCleaner(null)}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Cleaner Profile - {selectedCleaner ? getCleanerProfileInfo(selectedCleaner).first_name : ''}</DialogTitle>
+            <DialogTitle>Cleaner Profile - {selectedCleaner ? getCleanerProfileInfo(selectedCleaner, false).first_name : ''}</DialogTitle>
             <DialogDescription>
               Detailed cleaner information and service options
             </DialogDescription>
           </DialogHeader>
                     
           {selectedCleaner && (() => {
-            const cleanerProfile = getCleanerProfileInfo(selectedCleaner);
             const interest = getInterestStatusForCleaner(selectedCleaner.id);
             const hasInterest = !!interest;
             const isApproved = interest ? isInterestApprovedByCleaner(interest) : false;
             const isPaid = interest ? isPaymentCompleted(interest) : false;
+            
+            // Show full details only if paid
+            const showFullDetails = isPaid;
+            const cleanerProfile = getCleanerProfileInfo(selectedCleaner, showFullDetails);
             
             return (
               <div className="space-y-6">
@@ -1522,7 +1528,8 @@ export default function FindCleaner() {
                     />
                   )}
                   <div className="flex-1">
-                    <h3 className="text-2xl font-bold">{cleanerProfile.first_name} {cleanerProfile.last_name}</h3>
+                    {/* Show full name only if paid, otherwise only first name */}
+                    <h3 className="text-2xl font-bold">{showFullDetails ? cleanerProfile.fullName : cleanerProfile.first_name}</h3>
                     <p className="text-muted-foreground">
                       {cleanerProfile.city}{cleanerProfile.suburb ? `, ${cleanerProfile.suburb}` : ''}{cleanerProfile.town ? `, ${cleanerProfile.town}` : ''}
                     </p>
@@ -1557,8 +1564,16 @@ export default function FindCleaner() {
                       {selectedCleaner.profile_approved && (
                         <Badge variant="default">Profile Verified</Badge>
                       )}
-                     
                     </div>
+                    
+                    {/* Show contact details only if paid */}
+                    {showFullDetails && cleanerProfile.email && cleanerProfile.phone && (
+                      <div className="mt-4 p-4 bg-green-50 rounded-lg">
+                        <p className="font-semibold text-green-800">Contact Information (Unlocked)</p>
+                        <p className="text-sm text-green-700">📧 Email: {cleanerProfile.email}</p>
+                        <p className="text-sm text-green-700">📞 Phone: {cleanerProfile.phone}</p>
+                      </div>
+                    )}
                   </div>
                 </div>
 

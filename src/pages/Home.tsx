@@ -2,7 +2,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle, Heart, Shield, Star, Users, Video, AlertCircle, Sparkles, Home as HomeIcon } from "lucide-react";
+import { CheckCircle, Heart, Shield, Star, Users, Video, AlertCircle, Sparkles, Home as HomeIcon, AlertTriangle, Bell, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useEffect, useState } from "react";
@@ -14,6 +14,8 @@ export default function Home() {
   const { toast } = useToast();
   const [profileIncomplete, setProfileIncomplete] = useState(false);
   const [loadingProfile, setLoadingProfile] = useState(true);
+  const [missingFields, setMissingFields] = useState<string[]>([]);
+  const [dismissed, setDismissed] = useState(false);
   const [stats, setStats] = useState({
     nannies: 0,
     cleaners: 0,
@@ -30,31 +32,77 @@ export default function Home() {
 
     const checkProfile = async () => {
       try {
-        let table = userRole === 'nanny' ? 'nannies' : 'clients';
-        let requiredFields = userRole === 'nanny'
-          ? ['criminal_check_url', 'credit_check_url', 'proof_of_residence_url', 'interview_video_url', 'bio', 'academy_completed']
-          : ['first_name', 'last_name', 'phone', 'city'];
+        const missing: string[] = [];
+        
+        if (userRole === 'nanny') {
+          const { data, error } = await supabase
+            .from('nannies')
+            .select('*')
+            .eq('user_id', user.id)
+            .single();
 
-        const { data, error } = await supabase
-          .from(table)
-          .select(requiredFields.join(','))
-          .eq('user_id', user.id)
-          .single();
+          if (error || !data) {
+            setProfileIncomplete(true);
+            setMissingFields(['Complete your nanny profile']);
+            return;
+          }
 
-        if (error || !data) {
-          setProfileIncomplete(true);
-          return;
+          // Check each required field
+          if (!data.bio) missing.push('Add your Bio');
+          if (!data.languages || data.languages.length === 0) missing.push('Add Languages');
+          if (!data.experience_duration && data.experience_duration !== 0) missing.push('Add Experience Duration');
+          if (!data.hourly_rate) missing.push('Set Hourly Rate');
+          if (!data.education_level) missing.push('Add Education Level');
+          if (!data.date_of_birth) missing.push('Add Date of Birth');
+          if (!data.cv_url) missing.push('Upload CV');
+          if (!data.id_document_url) missing.push('Upload ID/Passport');
+          if (!data.proof_of_residence_url) missing.push('Upload Proof of Residence');
+          if (!data.interview_video_url) missing.push('Upload Introduction Video');
+          
+          setMissingFields(missing);
+          setProfileIncomplete(missing.length > 0);
+          
+        } else if (userRole === 'client') {
+          const { data: profileData, error: profileError } = await supabase
+            .from('profiles')
+            .select('first_name, last_name, phone, city')
+            .eq('id', user.id)
+            .single();
+
+          if (profileError || !profileData) {
+            setProfileIncomplete(true);
+            setMissingFields(['Complete your profile']);
+            return;
+          }
+
+          // Check required fields for clients
+          if (!profileData.first_name) missing.push('Add First Name');
+          if (!profileData.last_name) missing.push('Add Last Name');
+          if (!profileData.phone) missing.push('Add Phone Number');
+          if (!profileData.city) missing.push('Add City');
+          
+          // Check client preferences
+          const { data: clientData } = await supabase
+            .from('clients')
+            .select('preferred_employment_type, preferred_experience_type, preferred_accommodation_type')
+            .eq('user_id', user.id)
+            .single();
+            
+          if (clientData) {
+            if (!clientData.preferred_employment_type) missing.push('Set Employment Preference');
+            if (!clientData.preferred_experience_type) missing.push('Set Experience Preference');
+            if (!clientData.preferred_accommodation_type) missing.push('Set Accommodation Preference');
+          } else {
+            missing.push('Complete your preferences');
+          }
+          
+          setMissingFields(missing);
+          setProfileIncomplete(missing.length > 0);
         }
-
-        const missing = requiredFields.some(field => {
-          const value = data[field];
-          return value === null || value === '' || value === false;
-        });
-
-        setProfileIncomplete(missing);
       } catch (err) {
         console.error("Profile check failed:", err);
         setProfileIncomplete(true);
+        setMissingFields(['Complete your profile']);
       } finally {
         setLoadingProfile(false);
       }
@@ -159,27 +207,109 @@ export default function Home() {
     "Report any suspicious behavior immediately"
   ];
 
+  // Get dashboard link based on role
+  const getDashboardLink = () => {
+    if (userRole === 'nanny') return '/nanny-dashboard';
+    if (userRole === 'client') return '/client-dashboard';
+    return '/profile';
+  };
+
+  // Get role display name
+  const getRoleDisplay = () => {
+    if (userRole === 'nanny') return 'nanny/cleaner';
+    if (userRole === 'client') return 'client';
+    return 'user';
+  };
+
   return (
     <div className="min-h-screen">
-      {/* NEW: Scrolling Notification Bar for Incomplete Profiles */}
-      {user && userRole !== 'admin' && !loadingProfile && profileIncomplete && (
-        <div className="bg-gradient-to-r from-amber-500 to-orange-600 text-white py-4 px-6 shadow-lg animate-pulse">
-          <div className="container mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
-            <div className="flex items-center gap-3">
-              <AlertCircle className="h-6 w-6 animate-bounce" />
-              <p className="font-bold text-lg">
-                Action Required: Complete your profile to get full access to the platform!
-              </p>
+      {/* ENHANCED SCROLLING NOTIFICATION BAR FOR INCOMPLETE PROFILES */}
+      {user && userRole !== 'admin' && !loadingProfile && profileIncomplete && !dismissed && (
+        <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-red-500 text-white py-4 px-6 shadow-lg animate-slide-down">
+          <div className="container mx-auto">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-3 flex-1">
+                <div className="relative">
+                  <AlertTriangle className="h-8 w-8 animate-bounce" />
+                  <span className="absolute -top-1 -right-1 flex h-4 w-4">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-4 w-4 bg-red-500"></span>
+                  </span>
+                </div>
+                <div className="flex-1">
+                  <p className="font-bold text-lg">
+                    ⚠️ Action Required: Complete Your {getRoleDisplay()} Profile!
+                  </p>
+                  <div className="flex flex-wrap gap-2 mt-1">
+                    {missingFields.slice(0, 3).map((field, idx) => (
+                      <Badge key={idx} variant="secondary" className="bg-white/20 text-white border-none text-xs">
+                        {field}
+                      </Badge>
+                    ))}
+                    {missingFields.length > 3 && (
+                      <Badge variant="secondary" className="bg-white/20 text-white border-none text-xs">
+                        +{missingFields.length - 3} more
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <Link to={getDashboardLink()}>
+                  <Button size="lg" className="bg-white text-orange-600 hover:bg-gray-100 font-bold shadow-md transform transition-transform hover:scale-105">
+                    Complete Profile Now
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Button>
+                </Link>
+                <Button 
+                  size="icon" 
+                  variant="ghost" 
+                  className="text-white hover:bg-white/20"
+                  onClick={() => setDismissed(true)}
+                >
+                  <X className="h-5 w-5" />
+                </Button>
+              </div>
             </div>
-            <Link to={userRole === 'nanny' ? "/nanny-dashboard" : "/client-dashboard"}>
-              <Button size="lg" variant="secondary" className="bg-white text-orange-600 hover:bg-gray-100 font-bold shadow-md">
-                Complete Profile Now
-              </Button>
-            </Link>
+            
+            {/* Progress bar showing completion */}
+            <div className="mt-3">
+              <div className="flex justify-between text-xs mb-1">
+                <span>Profile Completion</span>
+                <span>{Math.max(0, 100 - (missingFields.length * 10))}%</span>
+              </div>
+              <div className="w-full h-2 bg-white/30 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-white rounded-full transition-all duration-500"
+                  style={{ width: `${Math.max(0, 100 - (missingFields.length * 10))}%` }}
+                ></div>
+              </div>
+            </div>
           </div>
         </div>
       )}
 
+      {/* Success banner for complete profiles (optional) */}
+      {user && userRole !== 'admin' && !loadingProfile && !profileIncomplete && !dismissed && (
+        <div className="bg-gradient-to-r from-green-500 to-emerald-600 text-white py-3 px-6 shadow-lg">
+          <div className="container mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <CheckCircle className="h-6 w-6 animate-pulse" />
+              <p className="font-medium">
+                ✓ Your profile is complete! Start browsing for {userRole === 'nanny' ? 'job opportunities' : 'nannies and cleaners'} today.
+              </p>
+            </div>
+            <Button 
+              size="sm" 
+              variant="ghost" 
+              className="text-white hover:bg-white/20"
+              onClick={() => setDismissed(true)}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Hero Section */}
       <section className="hero-gradient text-primary-foreground py-20">
@@ -203,7 +333,7 @@ export default function Home() {
                   Find a Cleaner
                 </Button>
               </Link>
-              <Link to="/register-nanny">
+              <Link to="/auth">
                 <Button size="lg" variant="outline" className="text-lg px-8 bg-white/10 border-white/20 text-white hover:bg-white/20">
                   Become a Nanny/Cleaner
                 </Button>
@@ -273,7 +403,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* NEW: Find Cleaner Section */}
+      {/* Find Cleaner Section */}
       <section className="py-20 bg-gradient-to-br from-blue-50 to-green-50">
         <div className="container mx-auto px-4">
           <div className="text-center mb-16">
@@ -464,3 +594,6 @@ export default function Home() {
     </div>
   );
 }
+
+// Add ArrowRight import
+import { ArrowRight } from "lucide-react";

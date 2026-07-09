@@ -53,7 +53,8 @@ import {
   IdCard,
   Users as UsersIcon,
   Download,
-  RefreshCw
+  RefreshCw,
+  UserCheck
 } from 'lucide-react';
 import {
   Dialog,
@@ -300,6 +301,9 @@ export default function AdminPanel() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedNannyId, setExpandedNannyId] = useState<string | null>(null);
+  
+  // NEW: Filter for approved workers only
+  const [showApprovedOnly, setShowApprovedOnly] = useState(false);
 
   const [reviewsComplaints, setReviewsComplaints] = useState<ReviewComplaint[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
@@ -481,8 +485,16 @@ export default function AdminPanel() {
     }
   };
 
+  // UPDATED: Filter with showApprovedOnly toggle
   const filteredAndSortedNannies = useMemo(() => {
     let result = [...nannies];
+    
+    // Apply approved filter
+    if (showApprovedOnly) {
+      result = result.filter((nanny) => nanny.profile_approved === true);
+    }
+    
+    // Apply search filter
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       result = result.filter((nanny) => {
@@ -492,13 +504,14 @@ export default function AdminPanel() {
         return fullName.includes(q) || email.includes(q);
       });
     }
+    
     result.sort((a, b) => {
       const lastA = a.profiles.last_name?.toLowerCase() || '';
       const lastB = b.profiles.last_name?.toLowerCase() || '';
       return lastA.localeCompare(lastB);
     });
     return result;
-  }, [nannies, searchQuery]);
+  }, [nannies, searchQuery, showApprovedOnly]);
 
   const filteredReviewsComplaints = useMemo(() => {
     let result = [...reviewsComplaints];
@@ -797,6 +810,9 @@ export default function AdminPanel() {
     );
   }
 
+  const approvedCount = nannies.filter(n => n.profile_approved === true).length;
+  const pendingCount = nannies.filter(n => n.profile_approved === false).length;
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-8">
@@ -831,18 +847,52 @@ export default function AdminPanel() {
             </CardHeader>
 
             <CardContent>
-              <div className="mb-6">
-                <Input
-                  placeholder="Search by name or email..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="max-w-md"
-                />
+              {/* Search and Filter Bar */}
+              <div className="mb-6 flex flex-col sm:flex-row gap-4">
+                <div className="flex-1">
+                  <Input
+                    placeholder="Search by name or email..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full"
+                  />
+                </div>
+                <div className="flex items-center gap-3">
+                  {/* Approved Only Toggle */}
+                  <Button
+                    variant={showApprovedOnly ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setShowApprovedOnly(!showApprovedOnly)}
+                    className="flex items-center gap-2 whitespace-nowrap"
+                  >
+                    <UserCheck className="h-4 w-4" />
+                    {showApprovedOnly ? 'Showing Approved' : 'Show Approved Only'}
+                    {showApprovedOnly && (
+                      <Badge className="ml-1 bg-white/20 text-white">
+                        {approvedCount}
+                      </Badge>
+                    )}
+                  </Button>
+                  
+                  {/* Stats Badge */}
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                      Approved: {approvedCount}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-yellow-500"></span>
+                      Pending: {pendingCount}
+                    </span>
+                  </div>
+                </div>
               </div>
 
               <div className="space-y-3">
                 {filteredAndSortedNannies.length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground">No workers found matching your search</div>
+                  <div className="text-center py-12 text-muted-foreground">
+                    {showApprovedOnly ? 'No approved workers found matching your search' : 'No workers found matching your search'}
+                  </div>
                 ) : (
                   filteredAndSortedNannies.map((nanny) => {
                     const profile = nanny.profiles;
@@ -854,7 +904,9 @@ export default function AdminPanel() {
                       <div key={nanny.id}>
                         {/* Compact Row */}
                         <Card
-                          className={`cursor-pointer transition-all hover:shadow-md ${isExpanded ? 'border-primary border-2 shadow-lg' : 'hover:border-gray-300'}`}
+                          className={`cursor-pointer transition-all hover:shadow-md ${
+                            isExpanded ? 'border-primary border-2 shadow-lg' : 'hover:border-gray-300'
+                          } ${nanny.profile_approved ? 'border-l-4 border-l-green-500' : 'border-l-4 border-l-yellow-500'}`}
                           onClick={() => setExpandedNannyId(isExpanded ? null : nanny.id)}
                         >
                           <CardContent className="p-4">

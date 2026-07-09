@@ -9,7 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { 
   CheckCircle, Clock, Upload, Video, User, MapPin, Languages, 
   GraduationCap, Award, Heart, FileText, Eye, Calendar, DollarSign, Briefcase, Home,
-  AlertTriangle, Globe, IdCard, Users, Phone
+  AlertTriangle, Globe, IdCard, Users, Phone, Brush, ClipboardCheck, Mic, BriefcaseBusiness
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import {
@@ -25,7 +25,7 @@ interface NannyProfile {
   id: string;
   bio: string | null;
   languages: string[] | null;
-  experience_type: 'nanny' | 'cleaning' | 'both';
+  experience_type: 'nanny' | 'cleaning' | 'both' | 'general_worker' | 'promoter' | 'admin_assistant';
   experience_duration: number | null;
   education_level: 'high school no matric' | 'matric' | 'certificate' | 'diploma' | 'degree' | null;
   hourly_rate: number | null;
@@ -47,7 +47,6 @@ interface NannyProfile {
   cv_url: string | null;
   employment_type: string | null;
   average_rating: number | null;
-  // NEW FIELDS
   nationality: string | null;
   id_document_url: string | null;
   emergency_contact_name: string | null;
@@ -123,36 +122,93 @@ const calculateAge = (dateOfBirth: string | null): number | null => {
   }
 };
 
-// Helper function to get missing requirements - UPDATED with new fields
+// Helper function to get experience type display name
+const getExperienceTypeDisplay = (type: string): string => {
+  switch (type) {
+    case 'nanny': return 'Nanny';
+    case 'cleaning': return 'Cleaner';
+    case 'both': return 'Nanny & Cleaner';
+    case 'general_worker': return 'General Worker';
+    case 'promoter': return 'Promoter';
+    case 'admin_assistant': return 'Admin Assistant';
+    default: return 'Worker';
+  }
+};
+
+// Helper function to get experience type icon
+const getExperienceTypeIcon = (type: string) => {
+  switch (type) {
+    case 'nanny':
+      return <User className="h-6 w-6" />;
+    case 'cleaning':
+      return <Brush className="h-6 w-6" />;
+    case 'general_worker':
+      return <BriefcaseBusiness className="h-6 w-6" />;
+    case 'promoter':
+      return <Mic className="h-6 w-6" />;
+    case 'admin_assistant':
+      return <ClipboardCheck className="h-6 w-6" />;
+    case 'both':
+      return <Users className="h-6 w-6" />;
+    default:
+      return <User className="h-6 w-6" />;
+  }
+};
+
+// Helper function to get dashboard title based on experience type
+const getDashboardTitle = (type: string): string => {
+  const display = getExperienceTypeDisplay(type);
+  return `${display} Dashboard`;
+};
+
+// Helper function to get welcome message based on experience type
+const getWelcomeMessage = (type: string): string => {
+  const display = getExperienceTypeDisplay(type);
+  switch (type) {
+    case 'nanny':
+      return 'Manage your nanny profile and connect with families.';
+    case 'cleaning':
+      return 'Manage your cleaner profile and connect with clients.';
+    case 'general_worker':
+      return 'Manage your profile and connect with employers.';
+    case 'promoter':
+      return 'Manage your promoter profile and connect with businesses.';
+    case 'admin_assistant':
+      return 'Manage your admin assistant profile and connect with employers.';
+    case 'both':
+      return 'Manage your dual profile and connect with clients.';
+    default:
+      return 'Manage your profile and connect with clients.';
+  }
+};
+
+// Helper function to get profile completion description based on experience type
+const getProfileCompletionDescription = (type: string): string => {
+  const display = getExperienceTypeDisplay(type);
+  return `Complete your ${display.toLowerCase()} profile to start receiving client interests`;
+};
+
+// Helper function to get missing requirements
 const getMissingRequirements = (nannyProfile: NannyProfile | null, userProfile: UserProfile | null): string[] => {
   const missing: string[] = [];
   
-  // Personal Information
   if (!nannyProfile?.date_of_birth) missing.push('Date of Birth');
   if (!nannyProfile?.nationality) missing.push('Nationality');
   if (!userProfile?.profile_picture_url) missing.push('Profile Picture');
-  
-  // Professional Information
   if (!nannyProfile?.bio) missing.push('Bio / About Me');
   if (!nannyProfile?.languages || nannyProfile.languages.length === 0) missing.push('Languages Spoken');
   if (!nannyProfile?.experience_duration && nannyProfile?.experience_duration !== 0) missing.push('Experience Duration');
   if (!nannyProfile?.hourly_rate) missing.push('Hourly Rate');
   if (!nannyProfile?.education_level) missing.push('Education Level');
-  
-  // Documents
   if (!nannyProfile?.criminal_check_url) missing.push('Criminal Check Document');
   if (!nannyProfile?.credit_check_url) missing.push('Credit Check Document');
   if (!nannyProfile?.proof_of_residence_url) missing.push('Proof of Residence');
   if (!nannyProfile?.cv_url) missing.push('CV / Resume');
   if (!nannyProfile?.id_document_url) missing.push('ID / Passport Document');
   if (!nannyProfile?.interview_video_url) missing.push('Introduction Video');
-  
-  // Emergency Contact
   if (!nannyProfile?.emergency_contact_name) missing.push('Emergency Contact Name');
   if (!nannyProfile?.emergency_contact_relationship) missing.push('Emergency Contact Relationship');
   if (!nannyProfile?.emergency_contact_phone) missing.push('Emergency Contact Phone');
-  
-  // Training
   if (!nannyProfile?.academy_completed) missing.push('Academy Training Completion');
   
   return missing;
@@ -194,9 +250,15 @@ export default function NannyDashboard() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState({ cv: false, criminal: false, credit: false, proof: false, video: false, picture: false, id: false });
 
-  // Dialog state
   const [isVideoDialogOpen, setIsVideoDialogOpen] = useState(false);
   const [pendingVideoFile, setPendingVideoFile] = useState<File | null>(null);
+
+  // Get experience type from profile
+  const experienceType = nannyProfile?.experience_type || 'nanny';
+  const dashboardTitle = getDashboardTitle(experienceType);
+  const welcomeMessage = getWelcomeMessage(experienceType);
+  const profileCompletionDesc = getProfileCompletionDescription(experienceType);
+  const ExperienceIcon = getExperienceTypeIcon(experienceType);
 
   useEffect(() => {
     if (user && userRole === 'nanny') {
@@ -217,7 +279,7 @@ export default function NannyDashboard() {
 
       const safeNannyData: NannyProfile = {
         ...nannyData,
-        experience_type: nannyData.experience_type as 'nanny' | 'cleaning' | 'both' || 'nanny',
+        experience_type: nannyData.experience_type as 'nanny' | 'cleaning' | 'both' | 'general_worker' | 'promoter' | 'admin_assistant' || 'nanny',
         education_level: nannyData.education_level as 'high school no matric' | 'matric' | 'certificate' | 'diploma' | 'degree' || 'matric',
         criminal_check_status: nannyData.criminal_check_status as 'pending' | 'approved' | 'rejected' || 'pending',
         credit_check_status: nannyData.credit_check_status as 'pending' | 'approved' | 'rejected' || 'pending',
@@ -305,7 +367,6 @@ export default function NannyDashboard() {
   };
 
   const handleFileUpload = async (file: File, type: 'criminal_check' | 'credit_check' | 'interview_video' | 'profile_picture' | 'intro_video' | 'proof_of_residence' | 'cv' | 'id_document') => {
-    // Validate file type for CV
     if (type === 'cv') {
       const validCvTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
       if (!validCvTypes.includes(file.type)) {
@@ -326,7 +387,6 @@ export default function NannyDashboard() {
       }
     }
     
-    // Validate file type for ID document
     if (type === 'id_document') {
       const validIdTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
       if (!validIdTypes.includes(file.type)) {
@@ -511,7 +571,7 @@ export default function NannyDashboard() {
     return (
       <div className="container mx-auto px-4 py-8 text-center">
         <h1 className="text-2xl font-bold text-destructive">Access Denied</h1>
-        <p className="text-muted-foreground mt-2">This page is only accessible to nannies.</p>
+        <p className="text-muted-foreground mt-2">This page is only accessible to workers.</p>
       </div>
     );
   }
@@ -536,22 +596,30 @@ export default function NannyDashboard() {
   const age = calculateAge(nannyProfile?.date_of_birth || null);
   const missingRequirements = getMissingRequirements(nannyProfile, userProfile);
   const isProfileComplete = missingRequirements.length === 0 && nannyProfile?.profile_approved === true;
+  const experienceDisplay = getExperienceTypeDisplay(experienceType);
 
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold">Nanny Dashboard</h1>
-        <p className="text-muted-foreground">Welcome back, {userProfile?.first_name} {userProfile?.last_name}!</p>
+        <div className="flex items-center gap-3">
+          {ExperienceIcon}
+          <h1 className="text-3xl font-bold">{dashboardTitle}</h1>
+        </div>
+        <p className="text-muted-foreground mt-1">
+          Welcome back, {userProfile?.first_name} {userProfile?.last_name}! {welcomeMessage}
+        </p>
+        <Badge className="mt-2 bg-primary/10 text-primary border-primary/20">
+          {experienceDisplay}
+        </Badge>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column */}
         <div className="lg:col-span-2 space-y-6">
           {/* Profile Status */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2"><User className="h-5 w-5" /> Profile Status</CardTitle>
-              <CardDescription>Complete your profile to start receiving client interests</CardDescription>
+              <CardDescription>{profileCompletionDesc}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -600,7 +668,6 @@ export default function NannyDashboard() {
                 </div>
               </div>
               
-              {/* ENHANCED INCOMPLETE PROFILE BANNER - Shows exactly what's missing */}
               {!isProfileComplete && (
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                   <div className="flex items-start gap-3">
@@ -629,7 +696,6 @@ export default function NannyDashboard() {
                 </div>
               )}
 
-              {/* Success banner when profile is fully complete but pending approval */}
               {missingRequirements.length === 0 && nannyProfile?.profile_approved === false && (
                 <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                   <div className="flex items-center gap-3">
@@ -664,14 +730,13 @@ export default function NannyDashboard() {
             </CardContent>
           </Card>
 
-          {/* Profile Information - Enhanced with new fields */}
+          {/* Profile Information */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2"><User className="h-5 w-5" /> Profile Information</CardTitle>
-              <CardDescription>Your professional nanny profile</CardDescription>
+              <CardDescription>Your professional {experienceDisplay.toLowerCase()} profile</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Personal Details Row */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium text-muted-foreground flex items-center gap-1">
@@ -703,15 +768,20 @@ export default function NannyDashboard() {
                   </label>
                   <p className="capitalize">{nannyProfile?.accommodation_preference?.replace('_', ' ') || 'Not specified'}</p>
                 </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+                    <Briefcase className="h-3 w-3" /> Role
+                  </label>
+                  <p>{experienceDisplay}</p>
+                </div>
               </div>
 
-              {/* Professional Details Row */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium text-muted-foreground flex items-center gap-1">
                     <Briefcase className="h-3 w-3" /> Experience
                   </label>
-                  <p>{getExperienceLabel(nannyProfile?.experience_duration)} - {nannyProfile?.experience_type}</p>
+                  <p>{getExperienceLabel(nannyProfile?.experience_duration)}</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-muted-foreground flex items-center gap-1">
@@ -733,7 +803,6 @@ export default function NannyDashboard() {
                 </div>
               </div>
 
-              {/* Emergency Contact Section - NEW */}
               <div className="border-t pt-4 mt-2">
                 <label className="text-sm font-medium text-muted-foreground flex items-center gap-1 mb-2">
                   <Users className="h-3 w-3" /> Emergency Contact
@@ -754,7 +823,6 @@ export default function NannyDashboard() {
                 </div>
               </div>
 
-              {/* Rating */}
               {nannyProfile?.average_rating && (
                 <div>
                   <label className="text-sm font-medium text-muted-foreground flex items-center gap-1">
@@ -778,7 +846,6 @@ export default function NannyDashboard() {
                 </div>
               )}
 
-              {/* Bio */}
               {nannyProfile?.bio && (
                 <div>
                   <label className="text-sm font-medium text-muted-foreground">Bio</label>
@@ -786,7 +853,6 @@ export default function NannyDashboard() {
                 </div>
               )}
 
-              {/* CV Link if uploaded */}
               {nannyProfile?.cv_url && (
                 <div className="mt-2 p-3 bg-green-50 rounded-md">
                   <label className="text-sm font-medium text-green-800 flex items-center gap-1">
@@ -803,7 +869,6 @@ export default function NannyDashboard() {
                 </div>
               )}
 
-              {/* ID Document Link if uploaded - NEW */}
               {nannyProfile?.id_document_url && (
                 <div className="mt-2 p-3 bg-blue-50 rounded-md">
                   <label className="text-sm font-medium text-blue-800 flex items-center gap-1">
@@ -842,7 +907,6 @@ export default function NannyDashboard() {
                 </div>
               )}
 
-              {/* INTRODUCTION VIDEO UPLOAD WITH DIALOG */}
               {!nannyProfile?.interview_video_url ? (
                 <div>
                   <input
@@ -865,7 +929,6 @@ export default function NannyDashboard() {
                 </div>
               )}
 
-              {/* ID DOCUMENT UPLOAD BUTTON - NEW */}
               {!nannyProfile?.id_document_url ? (
                 <div>
                   <input
@@ -910,7 +973,6 @@ export default function NannyDashboard() {
                 </div>
               )}
 
-              {/* CV UPLOAD BUTTON */}
               {!nannyProfile?.cv_url ? (
                 <div>
                   <input
@@ -955,7 +1017,6 @@ export default function NannyDashboard() {
                 </div>
               )}
 
-              {/* CRIMINAL CHECK UPLOAD */}
               {!nannyProfile?.criminal_check_url && (
                 <div>
                   <input type="file" id="criminal-check-upload" accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0], 'criminal_check')} />
@@ -965,7 +1026,6 @@ export default function NannyDashboard() {
                 </div>
               )}
 
-              {/* CREDIT CHECK UPLOAD */}
               {!nannyProfile?.credit_check_url && (
                 <div>
                   <input type="file" id="credit-check-upload" accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0], 'credit_check')} />
@@ -975,7 +1035,6 @@ export default function NannyDashboard() {
                 </div>
               )}
 
-              {/* PROOF OF RESIDENCE UPLOAD */}
               {!nannyProfile?.proof_of_residence_url && (
                 <div>
                   <input
@@ -1042,7 +1101,7 @@ export default function NannyDashboard() {
             </CardContent>
           </Card>
 
-          {/* CLIENT INTEREST REQUESTS */}
+          {/* Client Interest Requests */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -1110,7 +1169,7 @@ export default function NannyDashboard() {
         </div>
       </div>
 
-      {/* INTRODUCTION VIDEO INSTRUCTION DIALOG */}
+      {/* Introduction Video Instruction Dialog */}
       <Dialog open={isVideoDialogOpen} onOpenChange={setIsVideoDialogOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -1173,7 +1232,7 @@ export default function NannyDashboard() {
   );
 }
 
-// Add Star component since it's missing from imports
+// Star component
 const Star = ({ className }: { className?: string }) => (
   <svg 
     xmlns="http://www.w3.org/2000/svg" 

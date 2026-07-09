@@ -19,9 +19,10 @@ interface AuthContextType {
       city?: string;
       suburb?: string;
       user_type?: string;
-      bank_name?: string;           // NEW
-      account_number?: string;      // NEW
-      account_holder_name?: string; // NEW
+      bank_name?: string;
+      account_number?: string;
+      account_holder_name?: string;
+      experience_type?: string; // NEW: Add this
     }
   ) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
@@ -97,79 +98,98 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
-  // ───────────────────────────────────────────────
-  // SIGNUP – now accepts and forwards bank details
-  // ───────────────────────────────────────────────
   const signUp = async (
-    email: string,
-    password: string,
-    metadata?: {
-      first_name?: string;
-      last_name?: string;
-      phone?: string;
-      city?: string;
-      suburb?: string;
-      user_type?: string;
-      bank_name?: string;
-      account_number?: string;
-      account_holder_name?: string;
+  email: string,
+  password: string,
+  metadata?: {
+    first_name?: string;
+    last_name?: string;
+    phone?: string;
+    city?: string;
+    suburb?: string;
+    user_type?: string;
+    bank_name?: string;
+    account_number?: string;
+    account_holder_name?: string;
+    // NEW: All auth form fields
+    date_of_birth?: string;
+    nationality?: string;
+    bio?: string;
+    languages?: string;
+    experience_type?: string;
+    experience_duration?: number;
+    education_level?: string;
+    hourly_rate?: number;
+    employment_type?: string;
+    accommodation_preference?: string;
+  }
+) => {
+  try {
+    cleanupAuthState();
+
+    // Prepare payload for Edge Function with ALL fields
+    const payload: any = {
+      email,
+      password,
+      first_name: metadata?.first_name,
+      last_name: metadata?.last_name,
+      phone: metadata?.phone,
+      city: metadata?.city,
+      suburb: metadata?.suburb,
+      user_type: metadata?.user_type,
+      // Personal fields
+      date_of_birth: metadata?.date_of_birth,
+      nationality: metadata?.nationality,
+      // Professional fields
+      bio: metadata?.bio,
+      languages: metadata?.languages,
+      experience_type: metadata?.experience_type,
+      experience_duration: metadata?.experience_duration,
+      education_level: metadata?.education_level,
+      hourly_rate: metadata?.hourly_rate,
+      employment_type: metadata?.employment_type,
+      accommodation_preference: metadata?.accommodation_preference,
+      send_confirmation: true,
+      redirect_to: `${window.location.origin}/`
+    };
+
+    // Only include bank details if user is a nanny
+    if (metadata?.user_type === 'nanny') {
+      payload.bank_name = metadata.bank_name?.trim();
+      payload.account_number = metadata.account_number?.trim();
+      payload.account_holder_name = metadata.account_holder_name?.trim();
     }
-  ) => {
-    try {
-      cleanupAuthState();
 
-      // Prepare payload for Edge Function
-      const payload: any = {
-        email,
-        password,
-        first_name: metadata?.first_name,
-        last_name: metadata?.last_name,
-        phone: metadata?.phone,
-        city: metadata?.city,
-        suburb: metadata?.suburb,
-        user_type: metadata?.user_type,
-        send_confirmation: true,
-        redirect_to: `${window.location.origin}/`
-      };
+    const { data, error } = await supabase.functions.invoke('signup-with-role', {
+      body: payload
+    });
 
-      // Only include bank details if user is a nanny
-      if (metadata?.user_type === 'nanny') {
-        payload.bank_name = metadata.bank_name?.trim();
-        payload.account_number = metadata.account_number?.trim();
-        payload.account_holder_name = metadata.account_holder_name?.trim();
-      }
-
-      const { data, error } = await supabase.functions.invoke('signup-with-role', {
-        body: payload
-      });
-
-      if (error || !data?.success) {
-        const message = error?.message || data?.error || 'Failed to create account';
-        toast({
-          title: "Sign Up Error",
-          description: message,
-          variant: "destructive"
-        });
-        return { error: new Error(message) };
-      }
-
-      // Success toast
-      toast({
-        title: "Check Your Email",
-        description: "Please confirm your email to complete your profile.",
-        variant: "default"
-      });
-
-      return { error: null };
-    } catch (error: any) {
+    if (error || !data?.success) {
+      const message = error?.message || data?.error || 'Failed to create account';
       toast({
         title: "Sign Up Error",
-        description: error.message,
+        description: message,
         variant: "destructive"
       });
-      return { error };
+      return { error: new Error(message) };
     }
-  };
+
+    toast({
+      title: "Check Your Email",
+      description: "Please confirm your email to complete your profile.",
+      variant: "default"
+    });
+
+    return { error: null, data };
+  } catch (error: any) {
+    toast({
+      title: "Sign Up Error",
+      description: error.message,
+      variant: "destructive"
+    });
+    return { error };
+  }
+};
 
   const signIn = async (email: string, password: string) => {
     try {

@@ -1,4 +1,4 @@
-// pages/FindCleaner.tsx
+// pages/FindAdminAssistant.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
-import { Heart, MapPin, CheckCircle, X, Eye, CreditCard, Loader2, Star, Sparkles, ShieldCheck, Brush } from "lucide-react";
+import { Heart, MapPin, CheckCircle, X, Eye, CreditCard, Loader2, Star, Sparkles, ShieldCheck, Briefcase, User, Mail, Phone, FileText, Download, Calendar, DollarSign, Home, FileSpreadsheet, ClipboardCheck } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -35,11 +35,11 @@ interface Profile {
   user_type: string | null;
 }
 
-interface Cleaner {
+interface AdminAssistant {
   review_count: any;
   id: string;
   user_id: string;
-  experience_type: string;               // "cleaning" or "both"
+  experience_type: string;
   hourly_rate: number | null;
   bio: string | null;
   profile_approved: boolean | null;
@@ -52,17 +52,21 @@ interface Cleaner {
   criminal_check_status: string | null;
   credit_check_status: string | null;
   academy_completed: boolean | null;
-  training_cleaning: boolean | null;
-  training_specialized: boolean | null;
   experience_duration: number | null;
   employment_type: string | null;
+  cv_url: string | null;
+  id_document_url: string | null;
+  proof_of_residence_url: string | null;
+  languages: string[] | null;
+  education_level: string | null;
+  date_of_birth: string | null;
   profiles?: Profile | Profile[];
 }
 
 interface Interest {
   id: string;
   client_id: string;
-  nanny_id: string;                      // cleaner id here
+  nanny_id: string;
   message: string | null;
   status: string | null;
   created_at: string;
@@ -83,8 +87,9 @@ interface TermsAcceptanceDialogProps {
   onAccept: () => void;
   onCancel: () => void;
   loading?: boolean;
-  cleaningType: string;
+  assistantType: string;
   amount: number;
+  assistantName: string;
 }
 
 // Terms Acceptance Dialog Component
@@ -94,11 +99,11 @@ const TermsAcceptanceDialog: React.FC<TermsAcceptanceDialogProps> = ({
   onAccept,
   onCancel,
   loading = false,
-  cleaningType,
-  amount
+  assistantType,
+  amount,
+  assistantName
 }) => {
   const [hasAgreed, setHasAgreed] = useState(false);
-  const selectedCleaningTypeObj = cleaningTypes.find(t => t.value === cleaningType);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -109,7 +114,7 @@ const TermsAcceptanceDialog: React.FC<TermsAcceptanceDialogProps> = ({
             Terms of Service Agreement
           </DialogTitle>
           <DialogDescription>
-            Please review and accept our terms before proceeding with payment
+            Please review and accept our terms before proceeding with payment for {assistantName}
           </DialogDescription>
         </DialogHeader>
 
@@ -117,11 +122,11 @@ const TermsAcceptanceDialog: React.FC<TermsAcceptanceDialogProps> = ({
           <div className="bg-primary/5 p-4 rounded-lg">
             <p className="text-sm font-medium mb-2">Payment Summary:</p>
             <div className="flex justify-between items-center">
-              <span>{selectedCleaningTypeObj?.label} Service</span>
+              <span>{assistantType} Service</span>
               <span className="font-bold text-primary">R{amount}</span>
             </div>
             <p className="text-xs text-muted-foreground mt-2">
-              {selectedCleaningTypeObj?.description}
+              Once-off payment to connect with this admin assistant
             </p>
           </div>
 
@@ -150,8 +155,8 @@ const TermsAcceptanceDialog: React.FC<TermsAcceptanceDialogProps> = ({
               </div>
 
               <div className="border-l-4 border-primary pl-4 py-2">
-                <h4 className="font-semibold text-sm mb-1">5. Cleaner Sourcing</h4>
-                <p className="text-sm text-muted-foreground">You understand that Nanny Placements South Africa is a platform connecting families with cleaners. We do not employ or supervise cleaners listed on our platform. You are responsible for conducting your own checks and ensuring suitability.</p>
+                <h4 className="font-semibold text-sm mb-1">5. Admin Assistant Sourcing</h4>
+                <p className="text-sm text-muted-foreground">You understand that Nanny Placements South Africa is a platform connecting clients with admin assistants. We do not employ or supervise assistants listed on our platform. You are responsible for conducting your own checks and ensuring suitability.</p>
               </div>
 
               <div className="border-l-4 border-primary pl-4 py-2">
@@ -211,47 +216,42 @@ const TermsAcceptanceDialog: React.FC<TermsAcceptanceDialogProps> = ({
   );
 };
 
-// Cleaning type options with fees
-const cleaningTypes = [
-  { value: 'once_off', label: 'Once-off Cleaning', fee: 400, description: 'Admin arranges cleaner to visit your location' },
-  { value: 'part_time', label: 'Part-time Cleaning', fee: 200, description: 'Sourcing fee - arrange directly with cleaner' },
-  { value: 'full_time', label: 'Full-time Cleaning', fee: 200, description: 'Sourcing fee - arrange directly with cleaner' }
-];
-
-// Helper function to get cleaner profile info with privacy - ONLY FIRST NAME visible until paid
-const getCleanerProfileInfo = (cleaner: Cleaner, showFullName: boolean = false) => {
-  if (cleaner.profiles) {
-    const p = Array.isArray(cleaner.profiles) ? cleaner.profiles[0] : cleaner.profiles;
+// Helper function to get assistant profile info with privacy - ONLY FIRST NAME visible until paid
+const getAssistantProfileInfo = (assistant: AdminAssistant, showFullName: boolean = false) => {
+  if (assistant.profiles) {
+    const p = Array.isArray(assistant.profiles) ? assistant.profiles[0] : assistant.profiles;
     return {
-      first_name: showFullName ? (p.first_name || cleaner.first_name || 'No name') : (p.first_name || cleaner.first_name || 'No name'),
-      last_name: showFullName ? (p.last_name || cleaner.last_name || '') : '', // HIDE LAST NAME unless paid
-      fullName: showFullName ? `${p.first_name || cleaner.first_name || 'No name'} ${p.last_name || cleaner.last_name || ''}` : (p.first_name || cleaner.first_name || 'No name'),
-      city: p.city || cleaner.city || 'Location not specified',
-      suburb: p.suburb || cleaner.suburb || '',
+      first_name: showFullName ? (p.first_name || assistant.first_name || 'No name') : (p.first_name || assistant.first_name || 'No name'),
+      last_name: showFullName ? (p.last_name || assistant.last_name || '') : '',
+      fullName: showFullName ? `${p.first_name || assistant.first_name || 'No name'} ${p.last_name || assistant.last_name || ''}` : (p.first_name || assistant.first_name || 'No name'),
+      city: p.city || assistant.city || 'Location not specified',
+      suburb: p.suburb || assistant.suburb || '',
       town: p.town || '',
       profile_picture_url: p.profile_picture_url || null,
-      email: showFullName ? (p.email || '') : '', // HIDE EMAIL unless paid
-      phone: showFullName ? (p.phone || cleaner.phone || null) : null, // HIDE PHONE unless paid
+      email: showFullName ? (p.email || '') : '',
+      phone: showFullName ? (p.phone || assistant.phone || null) : null,
+      cv_url: showFullName ? (assistant.cv_url || null) : null,
       showFullDetails: showFullName
     };
   }
   return {
-    first_name: showFullName ? (cleaner.first_name || 'No name') : (cleaner.first_name || 'No name'),
-    last_name: showFullName ? (cleaner.last_name || '') : '',
-    fullName: showFullName ? `${cleaner.first_name || 'No name'} ${cleaner.last_name || ''}` : (cleaner.first_name || 'No name'),
-    city: cleaner.city || 'Location not specified',
-    suburb: cleaner.suburb || '',
+    first_name: showFullName ? (assistant.first_name || 'No name') : (assistant.first_name || 'No name'),
+    last_name: showFullName ? (assistant.last_name || '') : '',
+    fullName: showFullName ? `${assistant.first_name || 'No name'} ${assistant.last_name || ''}` : (assistant.first_name || 'No name'),
+    city: assistant.city || 'Location not specified',
+    suburb: assistant.suburb || '',
     town: '',
     profile_picture_url: null,
     email: showFullName ? '' : '',
-    phone: showFullName ? (cleaner.phone || null) : null,
+    phone: showFullName ? (assistant.phone || null) : null,
+    cv_url: showFullName ? (assistant.cv_url || null) : null,
     showFullDetails: showFullName
   };
 };
 
 const extractInterestId = (txRef: string): string | null => {
   if (!txRef) return null;
-  let cleanRef = txRef.startsWith("cleaner-") ? txRef.substring(8) : txRef;
+  let cleanRef = txRef.startsWith("adminassistant-") ? txRef.substring(15) : txRef;
   const parts = cleanRef.split("-");
   if (parts.length < 5) return null;
   const uuid = parts.slice(0, 5).join("-");
@@ -306,9 +306,8 @@ const sendReviewNotificationEmail = async (data: any): Promise<{success: boolean
 
 const processPaymentSuccess = async (interestId: string, transactionId: string, clientData: any) => {
   try {
-    console.log('🔄 Starting payment processing for cleaner interest:', interestId);
+    console.log('🔄 Starting payment processing for admin assistant interest:', interestId);
     
-    // Check if payment already exists
     const { data: existingPayments, error: paymentCheckError } = await supabase
       .from('payments')
       .select('*')
@@ -349,7 +348,6 @@ const processPaymentSuccess = async (interestId: string, transactionId: string, 
       return true;
     }
 
-    // Get interest details
     const { data: interestData, error: interestError } = await supabase
       .from('interests')
       .select('id, nanny_id, client_id, payment_status, status')
@@ -357,15 +355,12 @@ const processPaymentSuccess = async (interestId: string, transactionId: string, 
       .single();
 
     if (interestError || !interestData) {
-      console.error('❌ Cleaner interest not found:', interestError);
+      console.error('❌ Admin assistant interest not found:', interestError);
       throw new Error('Interest record not found');
     }
 
-    // Get the cleaning type from interest message or default
-    const cleaningType = 'once_off';
-    const feeAmount = cleaningTypes.find(t => t.value === cleaningType)?.fee || 200;
+    const feeAmount = 150;
 
-    // Create payment record
     const { error: paymentError } = await supabase
       .from('payments')
       .insert({
@@ -385,7 +380,6 @@ const processPaymentSuccess = async (interestId: string, transactionId: string, 
     }
     console.log('✅ Payment record created');
 
-    // Update interest payment_status
     const { error: interestUpdateError } = await supabase
       .from('interests')
       .update({
@@ -407,18 +401,17 @@ const processPaymentSuccess = async (interestId: string, transactionId: string, 
   }
 };
 
-export default function FindCleaner() {
+export default function FindAdminAssistant() {
   const { user, userRole, loading: authLoading } = useAuth();
   const { toast } = useToast();
-  const [cleaners, setCleaners] = useState<Cleaner[]>([]);
+  const [assistants, setAssistants] = useState<AdminAssistant[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({ 
     city: '', 
     town: '',
     employmentType: ''
   });
-  const [cleaningType, setCleaningType] = useState('');
-  const [selectedCleaner, setSelectedCleaner] = useState<Cleaner | null>(null);
+  const [selectedAssistant, setSelectedAssistant] = useState<AdminAssistant | null>(null);
   const [interestMessage, setInterestMessage] = useState('');
   const [sendingInterest, setSendingInterest] = useState(false);
   const [existingInterests, setExistingInterests] = useState<Interest[]>([]);
@@ -429,12 +422,17 @@ export default function FindCleaner() {
   const [refreshCount, setRefreshCount] = useState(0);
   const [showTermsDialog, setShowTermsDialog] = useState(false);
   const [pendingPaymentDetails, setPendingPaymentDetails] = useState<{
-    cleaner: Cleaner;
+    assistant: AdminAssistant;
     interestId: string;
   } | null>(null);
   const hasProcessedRedirect = useRef(false);
 
   const hasRole = userRole === 'client';
+
+  // Assistant type details
+  const assistantTypeName = 'Admin Assistant';
+  const assistantFee = 150;
+  const assistantSlug = 'adminassistant';
 
   useEffect(() => {
     // Load Flutterwave script
@@ -465,11 +463,11 @@ export default function FindCleaner() {
       const txRef = urlParams.get('tx_ref');
       const transactionId = urlParams.get('transaction_id');
       
-      console.log('🔍 Cleaner payment redirect check:', { status, txRef, transactionId });
+      console.log('🔍 Admin assistant payment redirect check:', { status, txRef, transactionId });
       
       if (status === 'successful' && txRef && transactionId) {
         hasProcessedRedirect.current = true;
-        console.log('✅ Cleaner payment successful redirect detected, starting processing...');
+        console.log('✅ Admin assistant payment successful redirect detected, starting processing...');
         
         try {
           if (!user) {
@@ -498,7 +496,7 @@ export default function FindCleaner() {
             return;
           }
 
-          console.log('🎯 Processing cleaner payment for interest:', interestId);
+          console.log('🎯 Processing admin assistant payment for interest:', interestId);
 
           const { data: clientData, error: clientError } = await supabase
             .from('clients')
@@ -527,7 +525,7 @@ export default function FindCleaner() {
             .single();
 
           if (interestError || !interestData) {
-            console.error('❌ Cleaner interest not found:', interestError);
+            console.error('❌ Admin assistant interest not found:', interestError);
             toast({
               title: "Payment Record Error",
               description: "Could not find interest record. Please contact support.",
@@ -551,7 +549,7 @@ export default function FindCleaner() {
           }
 
           if (interestData.payment_status === 'completed') {
-            console.log('✅ Cleaner interest already paid');
+            console.log('✅ Admin assistant interest already paid');
             toast({
               title: "Already Paid",
               description: "This interest has already been paid.",
@@ -563,8 +561,7 @@ export default function FindCleaner() {
 
           await processPaymentSuccess(interestId, transactionId, clientData);
 
-          // Get cleaner and client info for email
-          const { data: cleanerData } = await supabase
+          const { data: assistantData } = await supabase
             .from('nannies')
             .select('first_name, last_name')
             .eq('id', interestData.nanny_id)
@@ -576,29 +573,25 @@ export default function FindCleaner() {
             .eq('id', user.id)
             .single();
 
-          // Get cleaner contact info from profiles table
-          const { data: cleanerProfile } = await supabase
+          const { data: assistantProfile } = await supabase
             .from('profiles')
             .select('phone, email')
             .eq('id', interestData.nanny_id)
             .single();
 
-          // Send payment success email
-          if (cleanerData && clientProfile) {
-            console.log('📧 Attempting to send payment success email for cleaner...');
-            
-            const selectedCleaningTypeObj = cleaningTypes.find(t => t.value === cleaningType) || cleaningTypes[0];
+          if (assistantData && clientProfile) {
+            console.log('📧 Attempting to send payment success email...');
             
             const paymentEmailData = {
               to: clientProfile.email,
               client_name: `${clientProfile.first_name} ${clientProfile.last_name || ''}`,
-              cleaner_name: `${cleanerData.first_name} ${cleanerData.last_name || ''}`,
-              cleaner_phone: cleanerProfile?.phone || 'Not provided',
-              cleaner_email: cleanerProfile?.email || 'Not provided',
+              assistant_name: `${assistantData.first_name} ${assistantData.last_name || ''}`,
+              assistant_phone: assistantProfile?.phone || 'Not provided',
+              assistant_email: assistantProfile?.email || 'Not provided',
               transaction_id: transactionId,
-              amount: selectedCleaningTypeObj.fee.toString(),
-              service_type: selectedCleaningTypeObj.label,
-              description: selectedCleaningTypeObj.description
+              amount: assistantFee.toString(),
+              service_type: assistantTypeName,
+              description: `Admin Assistant service - contact details unlocked`
             };
 
             await sendPaymentSuccessEmail(paymentEmailData).catch(err => 
@@ -608,19 +601,17 @@ export default function FindCleaner() {
 
           toast({
             title: "🎉 Payment Successful!",
-            description: cleaningType === 'once_off' 
-              ? "Admin will arrange the cleaner to visit your location shortly."
-              : "Contact details have been unlocked. Refreshing...",
+            description: "Contact details have been unlocked. Refreshing...",
           });
 
-          window.history.replaceState({}, document.title, '/find-cleaner');
+          window.history.replaceState({}, document.title, `/find-${assistantSlug}`);
           await fetchExistingInterests();
           setRefreshCount(prev => prev + 1);
 
-          console.log('✅ Cleaner payment processed successfully');
+          console.log('✅ Admin assistant payment processed successfully');
 
         } catch (error: any) {
-          console.error('❌ Error processing cleaner payment redirect:', error);
+          console.error('❌ Error processing admin assistant payment redirect:', error);
           if (!error.message?.includes('already processed') && 
               !error.message?.includes('already paid')) {
             toast({
@@ -638,25 +629,25 @@ export default function FindCleaner() {
     };
 
     handlePaymentRedirect();
-  }, [user, userRole, toast, authLoading, cleaningType]);
+  }, [user, userRole, toast, authLoading]);
 
   useEffect(() => {
-    fetchCleaners();
+    fetchAssistants();
     if (user && hasRole) {
       fetchExistingInterests();
       const subscription = supabase
-        .channel('cleaner-interests-channel')
+        .channel('assistant-interests-channel')
         .on('postgres_changes', { 
           event: '*', 
           schema: 'public', 
           table: 'interests', 
           filter: `client_id=eq.${user.id}` 
         }, (payload) => {
-          console.log('Cleaner real-time update received:', payload);
+          console.log('Admin assistant real-time update received:', payload);
           fetchExistingInterests();
         })
         .subscribe((status) => {
-          console.log('Cleaner subscription status:', status);
+          console.log('Admin assistant subscription status:', status);
         });
 
       return () => {
@@ -665,7 +656,7 @@ export default function FindCleaner() {
     }
   }, [user, hasRole, refreshCount]);
 
-  const fetchCleaners = async () => {
+  const fetchAssistants = async () => {
     try {
       const { data, error } = await supabase
         .from('nannies')
@@ -684,21 +675,20 @@ export default function FindCleaner() {
             user_type
           )
         `)
-        .in('experience_type', ['cleaning', 'both'])
         .eq('profile_approved', true)
+        .eq('experience_type', 'admin_assistant')
         .order('average_rating', { ascending: false, nullsFirst: false });
 
-      if (error) throw error;
-      
-      console.log('Fetched cleaners data with average_rating:', data);
-      setCleaners(data || []);
+      if (error) {
+        console.error('Error fetching admin assistants:', error);
+        setAssistants([]);
+      } else {
+        console.log('Fetched admin assistants data:', data);
+        setAssistants(data || []);
+      }
     } catch (error) {
-      console.error('Error fetching cleaners:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load cleaners",
-        variant: "destructive"
-      });
+      console.error('Error fetching admin assistants:', error);
+      setAssistants([]);
     } finally {
       setLoading(false);
     }
@@ -708,7 +698,7 @@ export default function FindCleaner() {
     if (!user) return;
 
     try {
-      console.log('🔍 Fetching client interests for cleaners...');
+      console.log('🔍 Fetching client interests for admin assistants...');
       const { data: clientData } = await supabase
         .from('clients')
         .select('id')
@@ -738,11 +728,11 @@ export default function FindCleaner() {
           .eq('client_id', clientData.id);
 
         if (error) {
-          console.error('❌ Error fetching cleaner interests:', error);
+          console.error('❌ Error fetching admin assistant interests:', error);
           throw error;
         }
 
-        console.log('📋 Fetched cleaner interests with payment_status:', interests);
+        console.log('📋 Fetched admin assistant interests with payment_status:', interests);
         setExistingInterests(interests || []);
         
         const { data: payments } = await supabase
@@ -751,14 +741,14 @@ export default function FindCleaner() {
           .eq('client_id', clientData.id)
           .eq('status', 'completed');
           
-        console.log('💳 Completed payments for cleaners:', payments);
+        console.log('💳 Completed payments for admin assistants:', payments);
         
         if (payments && payments.length > 0) {
-          console.log('🔄 Verifying payment_status consistency for cleaners...');
+          console.log('🔄 Verifying payment_status consistency for admin assistants...');
           for (const payment of payments) {
             const interest = interests?.find(i => i.id === payment.interest_id);
             if (interest && interest.payment_status !== 'completed') {
-              console.warn(`⚠️ Inconsistency found: Payment exists for cleaner interest ${payment.interest_id} but payment_status is not 'completed'`);
+              console.warn(`⚠️ Inconsistency found: Payment exists for admin assistant interest ${payment.interest_id} but payment_status is not 'completed'`);
               await supabase
                 .from('interests')
                 .update({ 
@@ -774,22 +764,17 @@ export default function FindCleaner() {
         setExistingInterests([]);
       }
     } catch (error) {
-      console.error('Error fetching existing cleaner interests:', error);
+      console.error('Error fetching existing admin assistant interests:', error);
       setExistingInterests([]);
     }
   };
 
-  const canExpressInterest = (cleanerId: string) => {
-    const existingInterest = existingInterests.find(i => i.nanny_id === cleanerId);
-    return !existingInterest || existingInterest.status === 'declined';
-  };
-
-  const getInterestStatusForCleaner = (cleanerId: string): Interest | null => {
-    const interest = existingInterests.find(i => i.nanny_id === cleanerId);
+  const getInterestStatusForAssistant = (assistantId: string): Interest | null => {
+    const interest = existingInterests.find(i => i.nanny_id === assistantId);
     return interest || null;
   };
 
-  const isInterestApprovedByCleaner = (interest: Interest | null): boolean => {
+  const isInterestApprovedByAssistant = (interest: Interest | null): boolean => {
     if (!interest) return false;
     return interest.status === 'approved' || 
            interest.nanny_response === 'approved' || 
@@ -798,11 +783,6 @@ export default function FindCleaner() {
 
   const isPaymentCompleted = (interest: Interest | null): boolean => {
     if (!interest) return false;
-    console.log('🔍 Checking payment status for cleaner interest:', {
-      interestId: interest.id,
-      payment_status: interest.payment_status,
-      status: interest.status
-    });
     return interest.payment_status === 'completed';
   };
 
@@ -829,37 +809,8 @@ export default function FindCleaner() {
     }
   };
 
-  const sendInterestNotificationEmails = async (cleaner: Cleaner, clientProfile: any, message: string) => {
-    try {
-      const cleanerProfile = getCleanerProfileInfo(cleaner, false); // Don't show full details
-      
-      const cleanerEmailData = {
-        to: cleanerProfile.email,
-        subject: 'New Client Interest - Nanny Placements SA',
-        cleaner_name: `${cleanerProfile.first_name} ${cleanerProfile.last_name || ''}`,
-        client_name: `${clientProfile.first_name} ${clientProfile.last_name || ''}`,
-        client_message: message,
-        client_email: clientProfile.email
-      };
-
-      const result = await sendInterestNotificationEmail(cleanerEmailData);
-      
-      if (result.success) {
-        console.log('Cleaner interest notification sent successfully');
-      } else {
-        console.warn('Cleaner interest notification email may have failed:', result.message);
-      }
-
-      return result.success;
-
-    } catch (error) {
-      console.error('Error sending cleaner interest notification emails:', error);
-      return false;
-    }
-  };
-
   const handleExpressInterest = async () => {
-    if (!selectedCleaner || !user) return;
+    if (!selectedAssistant || !user) return;
 
     setSendingInterest(true);
     try {
@@ -874,7 +825,6 @@ export default function FindCleaner() {
         return;
       }
 
-      // Get or create client record
       let clientId;
       const { data: existingClient } = await supabase
         .from('clients')
@@ -920,33 +870,32 @@ export default function FindCleaner() {
 
       if (profileError || !clientProfile) throw new Error('Failed to fetch client profile');
 
-      // Check if interest already exists
       const { data: existingInterest, error: checkError } = await supabase
         .from('interests')
         .select('id')
         .eq('client_id', clientId)
-        .eq('nanny_id', selectedCleaner.id)
+        .eq('nanny_id', selectedAssistant.id)
         .single();
 
       if (checkError && checkError.code !== 'PGRST116') throw checkError;
       if (existingInterest) {
         toast({
           title: "Interest Already Sent",
-          description: "You have already expressed interest in this cleaner. Please wait for their response or contact admin.",
+          description: "You have already expressed interest in this admin assistant. Please wait for their response or contact admin.",
           variant: "destructive"
         });
-        setSelectedCleaner(null);
+        setSelectedAssistant(null);
         setSendingInterest(false);
         return;
       }
 
-      const cleanerProfile = getCleanerProfileInfo(selectedCleaner, false);
+      const assistantProfile = getAssistantProfileInfo(selectedAssistant, false);
       
       const { error } = await supabase
         .from('interests')
         .insert({
           client_id: clientId,
-          nanny_id: selectedCleaner.id,
+          nanny_id: selectedAssistant.id,
           message: interestMessage || null,
           status: 'pending',
           created_at: new Date().toISOString(),
@@ -956,26 +905,23 @@ export default function FindCleaner() {
           client_first_name: clientProfile.first_name,
           client_last_name: clientProfile.last_name,
           client_email: clientProfile.email,
-          nanny_first_name: cleanerProfile.first_name,
-          nanny_last_name: cleanerProfile.last_name,
-          nanny_email: cleanerProfile.email,
+          nanny_first_name: assistantProfile.first_name,
+          nanny_last_name: assistantProfile.last_name,
+          nanny_email: assistantProfile.email,
         });
 
       if (error) throw error;
 
-      // Send notification emails
-      await sendInterestNotificationEmails(selectedCleaner, clientProfile, interestMessage);
-
       toast({
         title: "Interest Sent!",
-        description: "The cleaner will be notified of your interest and can approve or decline it.",
+        description: "The admin assistant will be notified of your interest and can approve or decline it.",
       });
 
-      setSelectedCleaner(null);
+      setSelectedAssistant(null);
       setInterestMessage('');
       fetchExistingInterests();
     } catch (error: any) {
-      console.error('Error expressing interest in cleaner:', error.message);
+      console.error('Error expressing interest in admin assistant:', error.message);
       toast({
         title: "Error",
         description: error.message || "Failed to express interest",
@@ -986,18 +932,8 @@ export default function FindCleaner() {
     }
   };
 
-  const handlePayment = async (cleaner: Cleaner, interestId: string) => {
-    if (!cleaningType) {
-      toast({
-        title: "Selection Required",
-        description: "Please select a cleaning type first.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    // Store payment details and show terms dialog
-    setPendingPaymentDetails({ cleaner, interestId });
+  const handlePayment = async (assistant: AdminAssistant, interestId: string) => {
+    setPendingPaymentDetails({ assistant, interestId });
     setShowTermsDialog(true);
   };
 
@@ -1011,9 +947,9 @@ export default function FindCleaner() {
       return;
     }
 
-    const { cleaner, interestId } = pendingPaymentDetails;
+    const { assistant, interestId } = pendingPaymentDetails;
     setShowTermsDialog(false);
-    setProcessingPayment(cleaner.id);
+    setProcessingPayment(assistant.id);
     
     try {
       const { data: clientData } = await supabase
@@ -1052,27 +988,25 @@ export default function FindCleaner() {
         return;
       }
 
-      const cleanerProfile = getCleanerProfileInfo(cleaner, false);
-      const selectedCleaningTypeObj = cleaningTypes.find(t => t.value === cleaningType);
+      const assistantProfile = getAssistantProfileInfo(assistant, false);
       const timestamp = Date.now();
-      const txRef = `cleaner-${interestId}-${timestamp}`;
+      const txRef = `adminassistant-${interestId}-${timestamp}`;
       
-      console.log('💰 Starting cleaner payment with:', { 
+      console.log('💰 Starting admin assistant payment with:', { 
         interestId, 
         txRef,
-        cleanerId: cleaner.id,
+        assistantId: assistant.id,
         clientId: clientData.id,
-        cleaningType,
-        amount: selectedCleaningTypeObj?.fee
+        amount: assistantFee
       });
       
       window.FlutterwaveCheckout({
         public_key: flutterwavePublicKey,
         tx_ref: txRef,
-        amount: selectedCleaningTypeObj?.fee || 200,
+        amount: assistantFee,
         currency: "ZAR",
         payment_options: "card, mobilemoneyghana, ussd",
-        redirect_url: "https://nannyplacementssouthafrica.co.za/find-cleaner",
+        redirect_url: `https://nannyplacementssouthafrica.co.za/find-${assistantSlug}`,
         customer: {
           email: clientProfile?.email || user?.email || "",
           phone_number: clientProfile?.phone || "",
@@ -1080,11 +1014,11 @@ export default function FindCleaner() {
         },
         customizations: {
           title: "Nanny Placements SA",
-          description: `Payment for ${selectedCleaningTypeObj?.label} service`,
+          description: `Payment for ${assistantTypeName} service`,
           logo: "/favicon.ico",
         },
         callback: async (response: any) => {
-          console.log('💳 Cleaner payment callback response:', response);
+          console.log('💳 Admin assistant payment callback response:', response);
                   
           if (response.status === "successful") {
             toast({
@@ -1092,11 +1026,11 @@ export default function FindCleaner() {
               description: "Processing your payment...",
             });
             
-            console.log('✅ Cleaner payment successful, redirecting...');
-            window.location.href = `https://nannyplacementssouthafrica.co.za/find-cleaner?status=successful&tx_ref=${encodeURIComponent(txRef)}&transaction_id=${response.transaction_id}`;
+            console.log('✅ Admin assistant payment successful, redirecting...');
+            window.location.href = `https://nannyplacementssouthafrica.co.za/find-${assistantSlug}?status=successful&tx_ref=${encodeURIComponent(txRef)}&transaction_id=${response.transaction_id}`;
             
           } else {
-            console.log('❌ Cleaner payment failed:', response);
+            console.log('❌ Admin assistant payment failed:', response);
             toast({
               title: "Payment Failed",
               description: "Payment was not successful. Please try again.",
@@ -1107,13 +1041,13 @@ export default function FindCleaner() {
           setPendingPaymentDetails(null);
         },
         onclose: () => {
-          console.log('Cleaner payment modal closed');
+          console.log('Admin assistant payment modal closed');
           setProcessingPayment(null);
           setPendingPaymentDetails(null);
         }
       });
     } catch (error) {
-      console.error('Cleaner payment initialization error:', error);
+      console.error('Admin assistant payment initialization error:', error);
       toast({
         title: "Payment Error",
         description: "An error occurred during payment processing.",
@@ -1134,7 +1068,7 @@ export default function FindCleaner() {
   };
 
   const submitReview = async () => {
-    if (!selectedCleaner || !rating || !user) return;
+    if (!selectedAssistant || !rating || !user) return;
     setSubmittingReview(true);
     try {
       const { data: client } = await supabase
@@ -1145,23 +1079,21 @@ export default function FindCleaner() {
 
       if (!client) throw new Error('Client not found');
 
-      // Check if client has already reviewed this cleaner
       const { data: existingReview } = await supabase
         .from('reviews')
         .select('id')
-        .eq('nanny_id', selectedCleaner.id)
+        .eq('nanny_id', selectedAssistant.id)
         .eq('client_id', client.id)
         .single();
 
       if (existingReview) {
-        throw new Error('You have already reviewed this cleaner');
+        throw new Error('You have already reviewed this admin assistant');
       }
 
-      // Insert review
       const { error: reviewError } = await supabase
         .from('reviews')
         .insert({
-          nanny_id: selectedCleaner.id,
+          nanny_id: selectedAssistant.id,
           client_id: client.id,
           rating,
           complaint_text: review.trim() || null,
@@ -1170,23 +1102,20 @@ export default function FindCleaner() {
 
       if (reviewError) throw reviewError;
 
-      // The trigger will automatically update the average_rating in nannies table
-      
-      // Notify admin about the review
       const { data: clientProfile } = await supabase
         .from('profiles')
         .select('first_name, last_name, email')
         .eq('id', user.id)
         .single();
 
-      const cleanerProfile = getCleanerProfileInfo(selectedCleaner, false);
+      const assistantProfile = getAssistantProfileInfo(selectedAssistant, false);
 
       if (clientProfile) {
         await sendReviewNotificationEmail({
           to: 'admin@nannyplacementssouthafrica.co.za',
           client_name: `${clientProfile.first_name} ${clientProfile.last_name || ''}`,
           client_email: clientProfile.email,
-          cleaner_name: `${cleanerProfile.first_name} ${cleanerProfile.last_name || ''}`,
+          assistant_name: `${assistantProfile.first_name} ${assistantProfile.last_name || ''}`,
           rating: rating,
           review_text: review.trim() || 'No review text provided'
         }).catch(err => console.error('Review notification email failed:', err));
@@ -1197,11 +1126,10 @@ export default function FindCleaner() {
         description: "Your review has been submitted successfully."
       });
 
-      // Refresh cleaner data to show updated rating
-      fetchCleaners();
+      fetchAssistants();
       setRating(0);
       setReview('');
-      setSelectedCleaner(null);
+      setSelectedAssistant(null);
 
     } catch (error: any) {
       console.error('Error submitting review:', error);
@@ -1215,17 +1143,14 @@ export default function FindCleaner() {
     }
   };
 
-  const filteredCleaners = cleaners.filter(cleaner => {
-    const cleanerProfile = getCleanerProfileInfo(cleaner, false);
+  const filteredAssistants = assistants.filter(assistant => {
+    const assistantProfile = getAssistantProfileInfo(assistant, false);
     
-    if (filters.city && !cleanerProfile.city?.toLowerCase().includes(filters.city.toLowerCase())) {
+    if (filters.city && !assistantProfile.city?.toLowerCase().includes(filters.city.toLowerCase())) {
       return false;
     }
-    if (filters.town && !cleanerProfile.suburb?.toLowerCase().includes(filters.town.toLowerCase()) && 
-        !cleanerProfile.town?.toLowerCase().includes(filters.town.toLowerCase())) {
-      return false;
-    }
-    if (filters.employmentType && filters.employmentType !== 'all' && cleaner.employment_type !== filters.employmentType) {
+    if (filters.town && !assistantProfile.suburb?.toLowerCase().includes(filters.town.toLowerCase()) && 
+        !assistantProfile.town?.toLowerCase().includes(filters.town.toLowerCase())) {
       return false;
     }
     return true;
@@ -1234,7 +1159,7 @@ export default function FindCleaner() {
   if (loading) {
     return (
       <div className="container mx-auto px-4 py-8">
-        <div className="text-center">Loading available cleaners...</div>
+        <div className="text-center">Loading available admin assistants...</div>
       </div>
     );
   }
@@ -1248,22 +1173,23 @@ export default function FindCleaner() {
         onAccept={handleTermsAccepted}
         onCancel={handleTermsCancel}
         loading={processingPayment !== null}
-        cleaningType={cleaningType}
-        amount={cleaningTypes.find(t => t.value === cleaningType)?.fee || 0}
+        assistantType={assistantTypeName}
+        amount={assistantFee}
+        assistantName={pendingPaymentDetails ? getAssistantProfileInfo(pendingPaymentDetails.assistant, false).first_name : ''}
       />
 
       <div className="mb-10">
   <div className="flex items-center gap-4 mb-3">
     <div className="p-3 rounded-xl bg-primary/10 text-primary">
-      <Brush className="h-8 w-8" />
+      <ClipboardCheck className="h-8 w-8" />
     </div>
     <div>
       <h1 className="text-3xl md:text-4xl font-bold tracking-tight">
-        Find an Experienced Cleaner in Your Area
+        Find an Admin Assistant
       </h1>
       <div className="flex items-center gap-3 mt-1">
         <span className="inline-flex items-center rounded-full bg-primary/10 px-3 py-0.5 text-sm font-medium text-primary">
-          Experienced Cleaning 
+          Admin Support
         </span>
       </div>
     </div>
@@ -1271,23 +1197,26 @@ export default function FindCleaner() {
   
   {/* STYLE D: Professional descriptions */}
   <p className="text-muted-foreground text-base md:text-lg font-medium tracking-wide ml-0 md:ml-[76px]">
-    Browse verified, <span className="text-primary font-semibold bg-primary/5 px-1.5 py-0.5 rounded">trained cleaners</span> available in your area
+    Looking for someone to help with <span className="text-primary font-semibold bg-primary/5 px-1.5 py-0.5 rounded">basic filing, documentation, data entry</span>, and other administrative tasks?
+  </p>
+  <p className="text-muted-foreground text-base font-medium tracking-wide ml-0 md:ml-[76px] mt-2">
+    Browse verified admin assistants available for once-off or ongoing support. <span className="text-primary font-semibold bg-primary/5 px-1.5 py-0.5 rounded">R{assistantFee} once-off sourcing fee</span> to unlock contact details.
   </p>
   
   <div className="flex flex-wrap gap-3 mt-3 ml-0 md:ml-[76px]">
     <span className="text-sm text-muted-foreground">✓ Verified profiles</span>
     <span className="text-sm text-muted-foreground">✓ Background checked</span>
-    <span className="text-sm text-muted-foreground">✓ Cleaning certified</span>
+    <span className="text-sm text-muted-foreground">✓ Admin experience</span>
   </div>
 </div>
 
       <Card className="mb-8">
         <CardHeader>
-          <CardTitle>Filter Cleaners</CardTitle>
-          <CardDescription>Find the perfect cleaner for your needs</CardDescription>
+          <CardTitle>Filter Admin Assistants</CardTitle>
+          <CardDescription>Find the perfect admin assistant for your needs</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid md:grid-cols-3 gap-4">
+          <div className="grid md:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="city">City</Label>
               <Input
@@ -1306,74 +1235,23 @@ export default function FindCleaner() {
                 onChange={(e) => setFilters(prev => ({ ...prev, town: e.target.value }))}
               />
             </div>
-            <div>
-              <Label htmlFor="employment">Employment Type</Label>
-              <Select 
-                value={filters.employmentType} 
-                onValueChange={(value) => setFilters(prev => ({ ...prev, employmentType: value }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Any employment type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Any employment type</SelectItem>
-                  <SelectItem value="part_time">Part Time</SelectItem>
-                  <SelectItem value="full_time">Full Time</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="mb-8">
-        <CardHeader>
-          <CardTitle>Select Cleaning Service Type</CardTitle>
-          <CardDescription>Choose the type of cleaning service you need</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid md:grid-cols-3 gap-4">
-            {cleaningTypes.map((type) => (
-              <div
-                key={type.value}
-                className={`border rounded-lg p-4 cursor-pointer transition-all ${
-                  cleaningType === type.value
-                    ? 'border-primary bg-primary/5'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-                onClick={() => setCleaningType(type.value)}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="font-semibold">{type.label}</h3>
-                  <div className="text-lg font-bold text-primary">R{type.fee}</div>
-                </div>
-                <p className="text-sm text-muted-foreground mb-3">{type.description}</p>
-                {cleaningType === type.value && (
-                  <div className="flex items-center text-sm text-green-600">
-                    <CheckCircle className="h-4 w-4 mr-1" />
-                    Selected
-                  </div>
-                )}
-              </div>
-            ))}
           </div>
         </CardContent>
       </Card>
 
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredCleaners.map((cleaner) => {
-          const cleanerProfile = getCleanerProfileInfo(cleaner, false); // Only show first name until paid
-          const interest = getInterestStatusForCleaner(cleaner.id);
+        {filteredAssistants.map((assistant) => {
+          const assistantProfile = getAssistantProfileInfo(assistant, false);
+          const interest = getInterestStatusForAssistant(assistant.id);
           const hasInterest = !!interest;
-          const isApproved = interest ? isInterestApprovedByCleaner(interest) : false;
+          const isApproved = interest ? isInterestApprovedByAssistant(interest) : false;
           const isPaid = interest ? isPaymentCompleted(interest) : false;
           
-          // Determine if we should show full name (only after payment)
           const showFullName = isPaid;
-          const displayProfile = getCleanerProfileInfo(cleaner, showFullName);
+          const displayProfile = getAssistantProfileInfo(assistant, showFullName);
 
           return (
-            <Card key={cleaner.id} className="hover:shadow-lg transition-shadow">
+            <Card key={assistant.id} className="hover:shadow-lg transition-shadow">
               <CardContent className="p-6">
                 <div className="flex items-center gap-4 mb-4">
                   {displayProfile.profile_picture_url ? (
@@ -1384,29 +1262,23 @@ export default function FindCleaner() {
                     />
                   ) : (
                     <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
-                      <Sparkles className="h-8 w-8 text-primary" />
+                      <ClipboardCheck className="h-8 w-8 text-primary" />
                     </div>
                   )}
                   <div className="flex-1">
-                    {/* ONLY FIRST NAME shown until paid */}
                     <h3 className="text-lg font-semibold">{displayProfile.first_name}</h3>
                     <p className="text-sm text-muted-foreground flex items-center gap-1">
                       <MapPin className="h-3 w-3" />
                       {displayProfile.city}{displayProfile.suburb ? `, ${displayProfile.suburb}` : ''}
                     </p>
-                    {cleaner.employment_type && (
-                      <p className="text-xs text-muted-foreground capitalize mt-1">
-                        {cleaner.employment_type.replace('_', ' ')} cleaner
-                      </p>
-                    )}
-                    {cleaner.average_rating && (
+                    {assistant.average_rating && (
                       <div className="flex items-center gap-1">
                         <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
                         <span className="text-sm font-medium">
-                          {cleaner.average_rating.toFixed(1)}
-                          {cleaner.review_count && (
+                          {assistant.average_rating.toFixed(1)}
+                          {assistant.review_count && (
                             <span className="text-xs text-muted-foreground ml-1">
-                              ({cleaner.review_count})
+                              ({assistant.review_count})
                             </span>
                           )}
                         </span>
@@ -1417,46 +1289,37 @@ export default function FindCleaner() {
 
                 <div className="flex items-center justify-between">
                   <div>
-                    {/* ONLY FIRST NAME shown until paid */}
                     <h3 className="text-xl font-semibold">{displayProfile.first_name}</h3>
                     <p className="text-muted-foreground">
                       {displayProfile.city}{displayProfile.town ? `, ${displayProfile.town}` : ''}
                     </p>
-                    {cleaner.hourly_rate && (
-                      <p className="text-sm font-medium mt-1">R{cleaner.hourly_rate}/hour</p>
-                    )}
+                    <p className="text-sm font-medium mt-1">R{assistant.hourly_rate || 150}/hour</p>
                   </div>
                   <div className="text-right">
                     <div className="flex flex-wrap gap-1 mt-1">
-                      {cleaner.academy_completed && (
-                        <Badge variant="secondary">Online Training Complete</Badge>
-                      )}
-                      {cleaner.criminal_check_status === 'approved' && (
-                        <Badge variant="default">Criminal Check ✓</Badge>
-                      )}
-                      {cleaner.credit_check_status === 'approved' && (
-                        <Badge variant="default">Credit Check ✓</Badge>
-                      )}
-                      {cleaner.profile_approved && (
+                      {assistant.profile_approved && (
                         <Badge variant="default">Profile Verified</Badge>
                       )}
-                      {cleaner.training_cleaning && (
-                        <Badge variant="outline">Cleaning Certified</Badge>
+                      {assistant.criminal_check_status === 'approved' && (
+                        <Badge variant="default">Criminal Check ✓</Badge>
+                      )}
+                      {assistant.academy_completed && (
+                        <Badge variant="secondary">Training Complete</Badge>
                       )}
                     </div>
                   </div>
                 </div>
 
-                {cleaner.bio && (
+                {assistant.bio && (
                   <p className="text-sm text-muted-foreground mt-3 line-clamp-2">
-                    {cleaner.bio}
+                    {assistant.bio}
                   </p>
                 )}
 
                 <div className="flex flex-wrap gap-2 mt-4">
                   <Button 
                     variant="outline"
-                    onClick={() => setSelectedCleaner(cleaner)}
+                    onClick={() => setSelectedAssistant(assistant)}
                   >
                     View Profile
                   </Button>
@@ -1465,7 +1328,7 @@ export default function FindCleaner() {
                       {!hasInterest ? (
                         <Button 
                           className="flex-1"
-                          onClick={() => setSelectedCleaner(cleaner)}
+                          onClick={() => setSelectedAssistant(assistant)}
                         >
                           Express Interest
                         </Button>
@@ -1478,10 +1341,10 @@ export default function FindCleaner() {
                         <Button 
                           className="flex-1"
                           variant="default"
-                          onClick={() => interest?.id && handlePayment(cleaner, interest.id)}
-                          disabled={processingPayment === cleaner.id || !cleaningType}
+                          onClick={() => interest?.id && handlePayment(assistant, interest.id)}
+                          disabled={processingPayment === assistant.id}
                         >
-                          {processingPayment === cleaner.id ? (
+                          {processingPayment === assistant.id ? (
                             <>
                               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                               Processing...
@@ -1489,7 +1352,7 @@ export default function FindCleaner() {
                           ) : (
                             <>
                               <CreditCard className="mr-2 h-4 w-4" />
-                              Pay to Unlock Contact
+                              Pay R{assistantFee} to Unlock Contact
                             </>
                           )}
                         </Button>
@@ -1499,7 +1362,7 @@ export default function FindCleaner() {
                           variant="secondary"
                           disabled
                         >
-                          Awaiting Cleaner Response
+                          Awaiting Assistant Response
                         </Button>
                       )}
                     </>
@@ -1511,152 +1374,138 @@ export default function FindCleaner() {
         })}
       </div>
 
-      {filteredCleaners.length === 0 && (
+      {filteredAssistants.length === 0 && (
         <div className="text-center py-12">
-          <Sparkles className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-          <h3 className="text-lg font-semibold mb-2">No cleaners found</h3>
+          <ClipboardCheck className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+          <h3 className="text-lg font-semibold mb-2">No admin assistants found</h3>
           <p className="text-muted-foreground">
             Try adjusting your filters or check back later for new profiles.
           </p>
         </div>
       )}
 
-      <Dialog open={!!selectedCleaner} onOpenChange={() => setSelectedCleaner(null)}>
+      <Dialog open={!!selectedAssistant} onOpenChange={() => setSelectedAssistant(null)}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Cleaner Profile - {selectedCleaner ? getCleanerProfileInfo(selectedCleaner, false).first_name : ''}</DialogTitle>
+            <DialogTitle>Admin Assistant Profile - {selectedAssistant ? getAssistantProfileInfo(selectedAssistant, false).first_name : ''}</DialogTitle>
             <DialogDescription>
-              Detailed cleaner information and service options
+              Detailed admin assistant information and contact options
             </DialogDescription>
           </DialogHeader>
                     
-          {selectedCleaner && (() => {
-            const interest = getInterestStatusForCleaner(selectedCleaner.id);
+          {selectedAssistant && (() => {
+            const interest = getInterestStatusForAssistant(selectedAssistant.id);
             const hasInterest = !!interest;
-            const isApproved = interest ? isInterestApprovedByCleaner(interest) : false;
+            const isApproved = interest ? isInterestApprovedByAssistant(interest) : false;
             const isPaid = interest ? isPaymentCompleted(interest) : false;
             
-            // Show full details only if paid
             const showFullDetails = isPaid;
-            const cleanerProfile = getCleanerProfileInfo(selectedCleaner, showFullDetails);
+            const assistantProfile = getAssistantProfileInfo(selectedAssistant, showFullDetails);
             
             return (
               <div className="space-y-6">
                 <div className="flex items-start gap-4">
-                  {cleanerProfile.profile_picture_url && (
+                  {assistantProfile.profile_picture_url && (
                     <img
-                      src={cleanerProfile.profile_picture_url}
+                      src={assistantProfile.profile_picture_url}
                       alt="Profile"
                       className="w-24 h-24 rounded-full object-cover"
                     />
                   )}
                   <div className="flex-1">
-                    {/* Show full name only if paid, otherwise only first name */}
-                    <h3 className="text-2xl font-bold">{showFullDetails ? cleanerProfile.fullName : cleanerProfile.first_name}</h3>
+                    <h3 className="text-2xl font-bold">{showFullDetails ? assistantProfile.fullName : assistantProfile.first_name}</h3>
                     <p className="text-muted-foreground">
-                      {cleanerProfile.city}{cleanerProfile.suburb ? `, ${cleanerProfile.suburb}` : ''}{cleanerProfile.town ? `, ${cleanerProfile.town}` : ''}
+                      {assistantProfile.city}{assistantProfile.suburb ? `, ${assistantProfile.suburb}` : ''}{assistantProfile.town ? `, ${assistantProfile.town}` : ''}
                     </p>
                     <div className="flex gap-4 mt-1">
-                      {selectedCleaner.hourly_rate && (
+                      {selectedAssistant.hourly_rate && (
                         <p className="text-lg font-semibold text-primary">
-                          R{selectedCleaner.hourly_rate}/hour
+                          R{selectedAssistant.hourly_rate}/hour
                         </p>
                       )}
-                      {selectedCleaner.average_rating && (
+                      {selectedAssistant.average_rating && (
                         <div className="flex items-center gap-1">
                           <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                          <span className="font-medium">{selectedCleaner.average_rating.toFixed(1)}</span>
+                          <span className="font-medium">{selectedAssistant.average_rating.toFixed(1)}</span>
                         </div>
                       )}
                     </div>
-                    {selectedCleaner.employment_type && (
-                      <p className="text-sm text-muted-foreground capitalize mt-1">
-                        {selectedCleaner.employment_type.replace('_', ' ')} cleaner
-                      </p>
-                    )}
                     <div className="flex flex-wrap gap-2 mt-3">
-                      {selectedCleaner.academy_completed && (
-                        <Badge variant="secondary">Online Training Complete</Badge>
+                      {selectedAssistant.profile_approved && (
+                        <Badge variant="default">Profile Verified</Badge>
                       )}
-                      {selectedCleaner.criminal_check_status === 'approved' && (
+                      {selectedAssistant.criminal_check_status === 'approved' && (
                         <Badge variant="default">Criminal Check ✓</Badge>
                       )}
-                      {selectedCleaner.credit_check_status === 'approved' && (
-                        <Badge variant="default">Credit Check ✓</Badge>
-                      )}
-                      {selectedCleaner.profile_approved && (
-                        <Badge variant="default">Profile Verified</Badge>
+                      {selectedAssistant.academy_completed && (
+                        <Badge variant="secondary">Training Complete</Badge>
                       )}
                     </div>
                     
-                    {/* Show contact details only if paid */}
-                    {showFullDetails && cleanerProfile.email && cleanerProfile.phone && (
+                    {showFullDetails && assistantProfile.email && assistantProfile.phone && (
                       <div className="mt-4 p-4 bg-green-50 rounded-lg">
                         <p className="font-semibold text-green-800">Contact Information (Unlocked)</p>
-                        <p className="text-sm text-green-700">📧 Email: {cleanerProfile.email}</p>
-                        <p className="text-sm text-green-700">📞 Phone: {cleanerProfile.phone}</p>
+                        <p className="text-sm text-green-700">📧 Email: {assistantProfile.email}</p>
+                        <p className="text-sm text-green-700">📞 Phone: {assistantProfile.phone}</p>
+                        {assistantProfile.cv_url && (
+                          <p className="text-sm text-green-700 mt-2">
+                            📄 <a href={assistantProfile.cv_url} target="_blank" rel="noopener noreferrer" className="underline hover:text-green-800">
+                              View CV / Resume
+                            </a>
+                          </p>
+                        )}
                       </div>
                     )}
                   </div>
                 </div>
 
-                {selectedCleaner.bio && (
+                {selectedAssistant.bio && (
                   <div>
                     <h4 className="font-semibold mb-2">About Me</h4>
-                    <p className="text-muted-foreground">{selectedCleaner.bio}</p>
+                    <p className="text-muted-foreground">{selectedAssistant.bio}</p>
                   </div>
                 )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <h4 className="font-semibold mb-2">Experience</h4>
-                    <p className="capitalize">{selectedCleaner.experience_type}</p>
-                    {selectedCleaner.experience_duration !== null && (
-                      <p className="text-sm text-muted-foreground">
-                        {selectedCleaner.experience_duration === 0 ? 'No experience' : 
-                         selectedCleaner.experience_duration === 2 ? '1-2 years experience' :
-                         selectedCleaner.experience_duration === 4 ? '3-4 years experience' :
-                         selectedCleaner.experience_duration === 10 ? '5-10 years experience' :
-                         selectedCleaner.experience_duration === 15 ? '10+ years experience' : 
-                         'Experience not specified'}
-                      </p>
-                    )}
-                  </div>
-                  {selectedCleaner.employment_type && (
+                  {selectedAssistant.experience_duration !== null && (
                     <div>
-                      <h4 className="font-semibold mb-2">Availability</h4>
-                      <p className="capitalize">{selectedCleaner.employment_type.replace('_', ' ')}</p>
+                      <h4 className="font-semibold mb-2">Experience</h4>
+                      <p className="text-sm text-muted-foreground">
+                        {selectedAssistant.experience_duration === 0 ? 'No experience' : 
+                         selectedAssistant.experience_duration === 2 ? '1-2 years experience' :
+                         selectedAssistant.experience_duration === 4 ? '3-4 years experience' :
+                         selectedAssistant.experience_duration === 10 ? '5-10 years experience' :
+                         selectedAssistant.experience_duration === 15 ? '10+ years experience' : 
+                         `${selectedAssistant.experience_duration} months experience`}
+                      </p>
                     </div>
                   )}
-                </div>
-
-                <div>
-                  <h4 className="font-semibold mb-2">Service Options</h4>
-                  <div className="grid md:grid-cols-3 gap-4">
-                    {cleaningTypes.map((type) => (
-                      <div
-                        key={type.value}
-                        className={`border rounded-lg p-4 cursor-pointer transition-all ${
-                          cleaningType === type.value
-                            ? 'border-primary bg-primary/5'
-                            : 'border-gray-200 hover:border-gray-300'
-                        }`}
-                        onClick={() => setCleaningType(type.value)}
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <h3 className="font-semibold">{type.label}</h3>
-                          <div className="text-lg font-bold text-primary">R{type.fee}</div>
-                        </div>
-                        <p className="text-sm text-muted-foreground">{type.description}</p>
-                      </div>
-                    ))}
-                  </div>
+                  {selectedAssistant.employment_type && (
+                    <div>
+                      <h4 className="font-semibold mb-2">Availability</h4>
+                      <p className="capitalize">{selectedAssistant.employment_type.replace('_', ' ')}</p>
+                    </div>
+                  )}
+                  {selectedAssistant.languages && selectedAssistant.languages.length > 0 && (
+                    <div>
+                      <h4 className="font-semibold mb-2">Languages</h4>
+                      <p className="text-sm text-muted-foreground">{selectedAssistant.languages.join(', ')}</p>
+                    </div>
+                  )}
+                  {selectedAssistant.education_level && (
+                    <div>
+                      <h4 className="font-semibold mb-2">Education</h4>
+                      <p className="text-sm text-muted-foreground capitalize">
+                        {selectedAssistant.education_level.replace(/_/g, ' ')}
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {isPaid && (
                   <div className="border-t pt-6">
                     <h4 className="font-semibold mb-4 flex items-center gap-2">
-                      <Star className="h-5 w-5" /> Rate & Review This Cleaner
+                      <Star className="h-5 w-5" /> Rate & Review This Admin Assistant
                     </h4>
                     <p className="text-sm text-muted-foreground mb-4">
                       Your feedback helps other clients and improves our service quality
@@ -1687,7 +1536,7 @@ export default function FindCleaner() {
                       </Label>
                       <Textarea
                         id="review"
-                        placeholder="Share your experience with this cleaner..."
+                        placeholder="Share your experience with this admin assistant..."
                         value={review}
                         onChange={(e) => setReview(e.target.value)}
                         rows={3}
@@ -1727,7 +1576,7 @@ export default function FindCleaner() {
                             rows={3}
                             value={interestMessage}
                             onChange={(e) => setInterestMessage(e.target.value)}
-                            placeholder="Tell the cleaner about your cleaning needs, frequency, and any specific requirements..."
+                            placeholder="Tell the admin assistant about your tasks, requirements, and what you're looking for..."
                           />
                                           
                           {!isProfileComplete(user.id) && (
@@ -1751,44 +1600,31 @@ export default function FindCleaner() {
                           </Button>
                         </>
                       ) : isApproved ? (
-                        <>
-                          {!cleaningType && (
-                            <div className="p-3 bg-yellow-50 text-yellow-800 rounded-md mb-4">
-                              <p className="font-semibold">Please select a cleaning service type above before proceeding to payment</p>
-                              <p className="text-sm">Choose between Once-off Cleaning (R400) or Sourcing Fee (R200) for part-time/full-time arrangements</p>
-                            </div>
+                        <Button 
+                          className="w-full" 
+                          variant="default"
+                          onClick={() => interest?.id && handlePayment(selectedAssistant, interest.id)}
+                          disabled={processingPayment === selectedAssistant.id}
+                        >
+                          {processingPayment === selectedAssistant.id ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Processing Payment...
+                            </>
+                          ) : (
+                            <>
+                              <CreditCard className="mr-2 h-4 w-4" />
+                              Pay R{assistantFee} to Unlock Contact Details
+                            </>
                           )}
-                          <Button 
-                            className="w-full" 
-                            variant="default"
-                            onClick={() => interest?.id && handlePayment(selectedCleaner, interest.id)}
-                            disabled={processingPayment === selectedCleaner.id || !cleaningType}
-                          >
-                            {processingPayment === selectedCleaner.id ? (
-                              <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                Processing Payment...
-                              </>
-                            ) : (
-                              <>
-                                <CreditCard className="mr-2 h-4 w-4" />
-                                {cleaningType === 'once_off' ? 'Pay R400 - Admin Arranges Cleaner' : 'Pay R200 to Unlock Contact Details'}
-                              </>
-                            )}
-                          </Button>
-                          {cleaningType && cleaningType !== 'once_off' && (
-                            <p className="text-xs text-muted-foreground text-center mt-2">
-                              R200 sourcing fee - you'll arrange directly with the cleaner after receiving contact details
-                            </p>
-                          )}
-                        </>
+                        </Button>
                       ) : (
                         <Button 
                           className="w-full"
                           variant="secondary"
                           disabled
                         >
-                          Interest Pending - Awaiting Cleaner Response
+                          Interest Pending - Awaiting Assistant Response
                         </Button>
                       )}
                     </div>
@@ -1799,7 +1635,7 @@ export default function FindCleaner() {
           })()}
                     
           <DialogFooter>
-            <Button variant="outline" onClick={() => setSelectedCleaner(null)}>
+            <Button variant="outline" onClick={() => setSelectedAssistant(null)}>
               Close
             </Button>
           </DialogFooter>

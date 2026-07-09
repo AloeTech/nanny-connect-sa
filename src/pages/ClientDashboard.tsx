@@ -8,20 +8,31 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { 
   Heart, CreditCard, Calendar, User, MapPin, Clock, DollarSign, Eye, Edit, ArrowRight,
-  AlertTriangle, CheckCircle, Briefcase, Home, Phone, Mail, Sparkles
+  AlertTriangle, CheckCircle, Briefcase, Home, Phone, Mail, Sparkles, Filter, X,
+  Baby, Brush, Users, BriefcaseBusiness, Mic, FileText, Search, ChevronDown, ChevronUp,
+  ClipboardCheck
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+} from '@/components/ui/dialog';
 
 interface ClientProfile {
   id: string;
   user_id: string;
   description: string | null;
   preferred_employment_type: 'full_time' | 'part_time' | null;
-  preferred_experience_type: 'nanny' | 'cleaning' | 'both' | null;
+  preferred_experience_type: 'nanny' | 'cleaning' | 'both' | 'general_worker' | 'promoter' | 'admin_assistant' | null;
   preferred_accommodation_type: 'live_in' | 'stay_out' | null;
 }
 
@@ -72,6 +83,27 @@ interface Payment {
   transaction_id: string | null;
 }
 
+// Experience type options with icons and colors - ALL TYPES
+const EXPERIENCE_TYPE_FILTERS = [
+  { value: 'all', label: 'All Types', icon: Users, color: 'bg-gray-500' },
+  { value: 'nanny', label: 'Nanny', icon: Baby, color: 'bg-blue-500' },
+  { value: 'cleaning', label: 'Cleaner', icon: Brush, color: 'bg-green-500' },
+  { value: 'both', label: 'Nanny & Cleaner', icon: Users, color: 'bg-purple-500' },
+  { value: 'general_worker', label: 'General Worker', icon: BriefcaseBusiness, color: 'bg-orange-500' },
+  { value: 'promoter', label: 'Promoter', icon: Mic, color: 'bg-pink-500' },
+  { value: 'admin_assistant', label: 'Admin Assistant', icon: ClipboardCheck, color: 'bg-indigo-500' },
+];
+
+// All experience types for preferences
+const ALL_EXPERIENCE_TYPES = [
+  { value: 'nanny', label: 'Nanny Only' },
+  { value: 'cleaning', label: 'Cleaning Only' },
+  { value: 'both', label: 'Both Nanny & Cleaning' },
+  { value: 'general_worker', label: 'General Worker' },
+  { value: 'promoter', label: 'Promoter' },
+  { value: 'admin_assistant', label: 'Admin Assistant' },
+];
+
 // Helper function to get missing client requirements
 const getMissingClientRequirements = (userProfile: UserProfile | null, clientProfile: ClientProfile | null): string[] => {
   const missing: string[] = [];
@@ -81,7 +113,7 @@ const getMissingClientRequirements = (userProfile: UserProfile | null, clientPro
   if (!userProfile?.phone) missing.push('Phone Number');
   if (!userProfile?.city) missing.push('City');
   if (!clientProfile?.preferred_employment_type) missing.push('Preferred Employment Type');
-  if (!clientProfile?.preferred_experience_type) missing.push('Preferred Experience Type (Nanny/Cleaning/Both)');
+  if (!clientProfile?.preferred_experience_type) missing.push('Preferred Experience Type');
   if (!clientProfile?.preferred_accommodation_type) missing.push('Preferred Accommodation Type');
   
   return missing;
@@ -98,6 +130,19 @@ const getMissingPreferences = (clientProfile: ClientProfile | null): string[] =>
   return missing;
 };
 
+// Helper to get experience type display name
+const getExperienceTypeDisplay = (type: string): string => {
+  switch (type) {
+    case 'nanny': return 'Nanny';
+    case 'cleaning': return 'Cleaner';
+    case 'both': return 'Nanny & Cleaner';
+    case 'general_worker': return 'General Worker';
+    case 'promoter': return 'Promoter';
+    case 'admin_assistant': return 'Admin Assistant';
+    default: return 'Unknown';
+  }
+};
+
 export default function ClientDashboard() {
   const { user, userRole } = useAuth();
   const { toast } = useToast();
@@ -110,6 +155,11 @@ export default function ClientDashboard() {
   const [isEditingPreferences, setIsEditingPreferences] = useState(false);
   const [editedUserProfile, setEditedUserProfile] = useState<UserProfile | null>(null);
   const [editedClientProfile, setEditedClientProfile] = useState<ClientProfile | null>(null);
+  
+  // Filter states
+  const [selectedFilter, setSelectedFilter] = useState<string>('all');
+  const [showFilterModal, setShowFilterModal] = useState(false);
+  const [filteredInterests, setFilteredInterests] = useState<Interest[]>([]);
 
   useEffect(() => {
     if (user && userRole === 'client') {
@@ -121,6 +171,19 @@ export default function ClientDashboard() {
     setEditedUserProfile(userProfile);
     setEditedClientProfile(clientProfile);
   }, [userProfile, clientProfile]);
+
+  // Apply filter whenever interests or selectedFilter changes
+  useEffect(() => {
+    if (selectedFilter === 'all') {
+      setFilteredInterests(interests);
+    } else {
+      setFilteredInterests(
+        interests.filter(interest => 
+          interest.nannies?.experience_type === selectedFilter
+        )
+      );
+    }
+  }, [interests, selectedFilter]);
 
   const fetchData = async () => {
     try {
@@ -175,6 +238,7 @@ export default function ClientDashboard() {
           admin_approved: i.admin_approved || false
         }));
         setInterests(processed);
+        setFilteredInterests(processed);
       }
 
       const { data: clientPayments } = await supabase
@@ -256,6 +320,20 @@ export default function ClientDashboard() {
     }
   };
 
+  const getExperienceIcon = (type: string) => {
+    const filter = EXPERIENCE_TYPE_FILTERS.find(f => f.value === type);
+    if (filter) {
+      const Icon = filter.icon;
+      return <Icon className="h-4 w-4" />;
+    }
+    return <Users className="h-4 w-4" />;
+  };
+
+  const getFilterCount = (type: string) => {
+    if (type === 'all') return interests.length;
+    return interests.filter(i => i.nannies?.experience_type === type).length;
+  };
+
   if (userRole !== 'client') {
     return (
       <div className="container mx-auto px-4 py-8 text-center">
@@ -280,6 +358,8 @@ export default function ClientDashboard() {
   const hasPreferences = missingPreferences.length === 0;
   const canUseAutoMatch = isProfileComplete && hasPreferences;
 
+  const selectedFilterData = EXPERIENCE_TYPE_FILTERS.find(f => f.value === selectedFilter);
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-8">
@@ -294,7 +374,7 @@ export default function ClientDashboard() {
             <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5 flex-shrink-0" />
             <div className="flex-1">
               <p className="text-sm font-semibold text-yellow-800 mb-2">
-                Complete your profile to find the best nanny matches!
+                Complete your profile to find the best matches!
               </p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {missingRequirements.map((item, index) => (
@@ -330,7 +410,7 @@ export default function ClientDashboard() {
                 Set your preferences to use Auto Match!
               </p>
               <p className="text-sm text-blue-700 mb-2">
-                Tell us what kind of nanny/cleaner you're looking for:
+                Tell us what kind of worker you're looking for:
               </p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {missingPreferences.map((item, index) => (
@@ -366,7 +446,7 @@ export default function ClientDashboard() {
                 ✓ Your profile is complete! You can now use Auto Match.
               </p>
               <p className="text-sm text-green-700 mt-1">
-                Go to <Link to="/find-nanny" className="font-medium underline">Find Nanny</Link> and click the "Auto Match" button to find nannies that match your preferences.
+                Go to any "Find" page and click the "Auto Match" button to find workers that match your preferences.
               </p>
             </div>
           </div>
@@ -411,37 +491,156 @@ export default function ClientDashboard() {
             </Card>
           </div>
 
+          {/* Interests Card with Filter */}
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Heart className="h-5 w-5" />
-                Expressed Interests
-              </CardTitle>
-              <CardDescription>Track your nanny interest requests</CardDescription>
+            <CardHeader className="pb-3">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Heart className="h-5 w-5" />
+                    Expressed Interests
+                  </CardTitle>
+                  <CardDescription>Track your interest requests</CardDescription>
+                </div>
+                
+                {/* Filter Button with Badge */}
+                <Dialog open={showFilterModal} onOpenChange={setShowFilterModal}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" className="flex items-center gap-2">
+                      <Filter className="h-4 w-4" />
+                      Filter
+                      {selectedFilter !== 'all' && (
+                        <Badge variant="default" className="ml-1 bg-primary text-white">
+                          {getFilterCount(selectedFilter)}
+                        </Badge>
+                      )}
+                      <ChevronDown className="h-3 w-3 ml-1" />
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-md">
+                    <DialogHeader>
+                      <DialogTitle className="flex items-center gap-2">
+                        <Filter className="h-5 w-5" />
+                        Filter by Experience Type
+                      </DialogTitle>
+                      <DialogDescription>
+                        Select an experience type to filter your interests
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-2 py-4">
+                      {EXPERIENCE_TYPE_FILTERS.map((filter) => {
+                        const Icon = filter.icon;
+                        const count = getFilterCount(filter.value);
+                        const isSelected = selectedFilter === filter.value;
+                        
+                        return (
+                          <Button
+                            key={filter.value}
+                            variant={isSelected ? 'default' : 'ghost'}
+                            className={`w-full justify-start gap-3 py-6 ${
+                              isSelected ? 'bg-primary text-white' : 'hover:bg-gray-100'
+                            }`}
+                            onClick={() => {
+                              setSelectedFilter(filter.value);
+                              setShowFilterModal(false);
+                            }}
+                          >
+                            <div className={`p-2 rounded-lg ${filter.color} text-white`}>
+                              <Icon className="h-4 w-4" />
+                            </div>
+                            <span className="flex-1 text-left">{filter.label}</span>
+                            <Badge variant={isSelected ? 'secondary' : 'outline'} className={isSelected ? 'bg-white/20 text-white' : ''}>
+                              {count}
+                            </Badge>
+                          </Button>
+                        );
+                      })}
+                      
+                      {selectedFilter !== 'all' && (
+                        <Button 
+                          variant="ghost" 
+                          className="w-full justify-center text-muted-foreground hover:text-foreground"
+                          onClick={() => {
+                            setSelectedFilter('all');
+                            setShowFilterModal(false);
+                          }}
+                        >
+                          <X className="h-4 w-4 mr-2" />
+                          Clear Filter
+                        </Button>
+                      )}
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              </div>
+              
+              {/* Active Filter Display */}
+              {selectedFilter !== 'all' && selectedFilterData && (
+                <div className="flex items-center gap-2 mt-2">
+                  <Badge className="bg-primary/10 text-primary border-primary/20 flex items-center gap-1 py-1.5">
+                    {selectedFilterData.icon && <selectedFilterData.icon className="h-3 w-3" />}
+                    {selectedFilterData.label}
+                    <button
+                      onClick={() => setSelectedFilter('all')}
+                      className="ml-1 hover:text-red-500 transition-colors"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                  <span className="text-xs text-muted-foreground">
+                    {filteredInterests.length} {filteredInterests.length === 1 ? 'result' : 'results'}
+                  </span>
+                </div>
+              )}
             </CardHeader>
+            
             <CardContent>
-              {interests.length === 0 ? (
+              {filteredInterests.length === 0 ? (
                 <div className="text-center py-8">
-                  <Eye className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <p className="text-muted-foreground">No interests expressed yet</p>
-                  <Link to="/find-nanny">
-                    <Button className="mt-4">Find Nannies</Button>
-                  </Link>
+                  {selectedFilter !== 'all' ? (
+                    <>
+                      <div className="flex justify-center mb-4">
+                        <div className="p-4 bg-gray-100 rounded-full">
+                          {selectedFilterData?.icon && <selectedFilterData.icon className="h-8 w-8 text-gray-400" />}
+                        </div>
+                      </div>
+                      <p className="text-muted-foreground">No {selectedFilterData?.label} interests yet</p>
+                      <p className="text-sm text-muted-foreground mt-1">Try changing your filter or find new workers</p>
+                    </>
+                  ) : (
+                    <>
+                      <Eye className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                      <p className="text-muted-foreground">No interests expressed yet</p>
+                      <Link to="/">
+                        <Button className="mt-4">Find Workers</Button>
+                      </Link>
+                    </>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {interests.map((interest) => {
-                    const nannyFirstName = interest.nannies.profiles.first_name;
+                  {filteredInterests.map((interest) => {
+                    const workerFirstName = interest.nannies.profiles.first_name;
                     const isApproved = interest.nanny_response === 'approved';
                     const isPaid = interest.payment_status === 'completed';
+                    const experienceType = interest.nannies.experience_type;
+                    const expDisplay = getExperienceTypeDisplay(experienceType);
+                    const filterIcon = EXPERIENCE_TYPE_FILTERS.find(f => f.value === experienceType);
+                    const IconComponent = filterIcon?.icon || Users;
 
                     return (
-                      <div key={interest.id} className="border rounded-lg p-6 bg-white shadow-sm">
+                      <div key={interest.id} className="border rounded-lg p-6 bg-white shadow-sm hover:shadow-md transition-shadow">
                         <div className="flex justify-between items-start mb-4">
                           <div>
-                            <p className="text-xl font-bold text-gray-900">
-                              {nannyFirstName}
-                            </p>
+                            <div className="flex items-center gap-3">
+                              <p className="text-xl font-bold text-gray-900">
+                                {workerFirstName}
+                              </p>
+                              <Badge variant="outline" className="flex items-center gap-1">
+                                <IconComponent className="h-3 w-3" />
+                                {expDisplay}
+                              </Badge>
+                            </div>
                             <p className="text-sm text-muted-foreground mt-1">
                               Interest sent on {new Date(interest.created_at).toLocaleDateString()}
                             </p>
@@ -455,12 +654,12 @@ export default function ClientDashboard() {
                               🎉 Approved! Ready for Payment
                             </p>
                             <p className="text-sm text-yellow-700">
-                              {nannyFirstName} has approved your interest request.
+                              {workerFirstName} has approved your interest request.
                             </p>
-                            <Link to="/find-nanny">
+                            <Link to={`/find-${experienceType}`}>
                               <Button className="mt-3 w-full">
                                 <ArrowRight className="h-4 w-4 mr-2" />
-                                Go to Find Nanny to Complete Payment
+                                Go to Complete Payment
                               </Button>
                             </Link>
                           </div>
@@ -472,10 +671,10 @@ export default function ClientDashboard() {
                               ✓ Contact Details Unlocked!
                             </p>
                             <p className="text-emerald-700 font-medium">
-                              {nannyFirstName}'s full contact details have been sent to your email.
+                              {workerFirstName}'s full contact details have been sent to your email.
                             </p>
                             <p className="text-sm text-emerald-600 mt-3">
-                              Check your email for {nannyFirstName}'s phone number and email address.
+                              Check your email for {workerFirstName}'s phone number and email address.
                               You can now arrange your interview directly.
                             </p>
                           </div>
@@ -485,7 +684,7 @@ export default function ClientDashboard() {
                           <div className="text-center py-4">
                             <p className="text-amber-700 font-medium flex items-center justify-center gap-2">
                               <Clock className="h-5 w-5" />
-                              Waiting for {nannyFirstName} to accept your request...
+                              Waiting for {workerFirstName} to accept your request...
                             </p>
                           </div>
                         )}
@@ -493,14 +692,14 @@ export default function ClientDashboard() {
                         {interest.nanny_response === 'declined' && (
                           <div className="text-center py-4">
                             <p className="text-red-600 font-semibold">
-                              {nannyFirstName} has declined your request
+                              {workerFirstName} has declined your request
                             </p>
                             <p className="text-sm text-muted-foreground mt-2">
-                              Don't be discouraged! There are many other nannies available.
+                              Don't be discouraged! There are many other workers available.
                             </p>
                             <Link to="/find-nanny">
                               <Button variant="outline" className="mt-3">
-                                Browse More Nannies
+                                Browse More Workers
                               </Button>
                             </Link>
                           </div>
@@ -536,7 +735,7 @@ export default function ClientDashboard() {
                   {payments.map((p) => (
                     <div key={p.id} className="flex justify-between items-center border rounded-lg p-4 hover:bg-gray-50 transition-colors">
                       <div>
-                        <p className="font-medium">R{p.amount.toFixed(2)} - Nanny Contact Unlock</p>
+                        <p className="font-medium">R{p.amount.toFixed(2)} - Worker Contact Unlock</p>
                         <p className="text-sm text-muted-foreground">
                           {new Date(p.created_at).toLocaleDateString('en-ZA', {
                             weekday: 'short',
@@ -659,7 +858,7 @@ export default function ClientDashboard() {
             </CardContent>
           </Card>
 
-          {/* Preferences Card */}
+          {/* Preferences Card - UPDATED with ALL experience types */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -705,9 +904,11 @@ export default function ClientDashboard() {
                         <SelectValue placeholder="Select experience type" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="nanny">Nanny Only</SelectItem>
-                        <SelectItem value="cleaning">Cleaning Only</SelectItem>
-                        <SelectItem value="both">Both Nanny & Cleaning</SelectItem>
+                        {ALL_EXPERIENCE_TYPES.map((type) => (
+                          <SelectItem key={type.value} value={type.value}>
+                            {type.label}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -734,7 +935,7 @@ export default function ClientDashboard() {
                       id="description"
                       value={editedClientProfile?.description || ''} 
                       onChange={(e) => setEditedClientProfile(prev => ({ ...prev!, description: e.target.value }))} 
-                      placeholder="Tell nannies about your family, children, and what you're looking for..."
+                      placeholder="Tell workers about your family, children, and what you're looking for..."
                       rows={3}
                     />
                   </div>
@@ -755,7 +956,7 @@ export default function ClientDashboard() {
                   <div>
                     <p className="text-sm font-medium">Experience Type</p>
                     <p className="text-sm text-muted-foreground capitalize">
-                      {clientProfile?.preferred_experience_type || 'Not set'}
+                      {clientProfile?.preferred_experience_type ? getExperienceTypeDisplay(clientProfile.preferred_experience_type) : 'Not set'}
                     </p>
                   </div>
                   <div>
@@ -779,46 +980,46 @@ export default function ClientDashboard() {
           </Card>
 
           <Card>
-            <CardHeader>
-              <CardTitle>Quick Actions</CardTitle>
-              <CardDescription>Manage your nanny search</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Link to="/find-nanny">
-                <Button className="w-full justify-start">
-                  <Heart className="h-4 w-4 mr-2" />
-                  Find More Nannies
-                </Button>
-              </Link>
-              
-              {canUseAutoMatch && (
-                <Link to="/find-nanny">
-                  <Button variant="default" className="w-full justify-start bg-purple-600 hover:bg-purple-700">
-                    <Sparkles className="h-4 w-4 mr-2" />
-                    Try Auto Match
-                  </Button>
-                </Link>
-              )}
-              
-              {interests.filter(i => i.nanny_response === 'approved' && i.payment_status !== 'completed').length > 0 && (
-                <Link to="/find-nanny">
-                  <Button variant="default" className="w-full justify-start bg-green-600 hover:bg-green-700">
-                    <CreditCard className="h-4 w-4 mr-2" />
-                    Complete Pending Payments
-                  </Button>
-                </Link>
-              )}
-              
-              {interests.filter(i => i.payment_status === 'completed').length > 0 && (
-                <Link to="/find-nanny">
-                  <Button variant="outline" className="w-full justify-start">
-                    <Eye className="h-4 w-4 mr-2" />
-                    View Unlocked Contacts
-                  </Button>
-                </Link>
-              )}
-            </CardContent>
-          </Card>
+  <CardHeader>
+    <CardTitle>Quick Actions</CardTitle>
+    <CardDescription>Manage your worker search</CardDescription>
+  </CardHeader>
+  <CardContent className="space-y-3">
+    <Link to="/">
+      <Button className="w-full justify-start">
+        <Users className="h-4 w-4 mr-2" />
+        Find Workers
+      </Button>
+    </Link>
+    
+    {canUseAutoMatch && (
+      <Link to="/find-nanny">
+        <Button variant="default" className="w-full justify-start bg-purple-600 hover:bg-purple-700">
+          <Sparkles className="h-4 w-4 mr-2" />
+          Try Auto Match
+        </Button>
+      </Link>
+    )}
+    
+    {interests.filter(i => i.nanny_response === 'approved' && i.payment_status !== 'completed').length > 0 && (
+      <Link to="/find-nanny">
+        <Button variant="default" className="w-full justify-start bg-green-600 hover:bg-green-700">
+          <CreditCard className="h-4 w-4 mr-2" />
+          Complete Pending Payments
+        </Button>
+      </Link>
+    )}
+    
+    {interests.filter(i => i.payment_status === 'completed').length > 0 && (
+      <Link to="/find-nanny">
+        <Button variant="outline" className="w-full justify-start">
+          <Eye className="h-4 w-4 mr-2" />
+          View Unlocked Contacts
+        </Button>
+      </Link>
+    )}
+  </CardContent>
+</Card>
 
           <Card className="border-blue-200 bg-blue-50">
             <CardHeader>

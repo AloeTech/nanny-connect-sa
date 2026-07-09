@@ -2,7 +2,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle, Heart, Shield, Star, Users, Video, AlertCircle, Sparkles, Home as HomeIcon, AlertTriangle, Bell, X } from "lucide-react";
+import { CheckCircle, Heart, Shield, Star, Users, Video, AlertCircle, Sparkles, Home as HomeIcon, AlertTriangle, Bell, X, Briefcase, Megaphone, ClipboardCheck, ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useEffect, useState } from "react";
@@ -19,8 +19,10 @@ export default function Home() {
   const [stats, setStats] = useState({
     nannies: 0,
     cleaners: 0,
-    clients: 0,
-    placements: 0
+    generalWorkers: 0,
+    promoters: 0,
+    adminAssistants: 0,
+    clients: 0
   });
 
   // Check if logged-in user has incomplete profile
@@ -111,7 +113,7 @@ export default function Home() {
     checkProfile();
   }, [user, userRole]);
 
-  // Fetch stats
+  // Fetch stats - Updated with new worker types
   useEffect(() => {
     const fetchStats = async () => {
       try {
@@ -129,22 +131,39 @@ export default function Home() {
           .eq('profile_approved', true)
           .in('experience_type', ['cleaning', 'both']);
 
+        // Get general workers count
+        const { count: generalWorkersCount } = await supabase
+          .from('nannies')
+          .select('*', { count: 'exact', head: true })
+          .eq('profile_approved', true)
+          .eq('experience_type', 'general_worker');
+
+        // Get promoters count
+        const { count: promotersCount } = await supabase
+          .from('nannies')
+          .select('*', { count: 'exact', head: true })
+          .eq('profile_approved', true)
+          .eq('experience_type', 'promoter');
+
+        // Get admin assistants count
+        const { count: adminAssistantsCount } = await supabase
+          .from('nannies')
+          .select('*', { count: 'exact', head: true })
+          .eq('profile_approved', true)
+          .eq('experience_type', 'admin_assistant');
+
         // Get clients count
         const { count: clientsCount } = await supabase
           .from('clients')
           .select('*', { count: 'exact', head: true });
 
-        // Get successful placements count (from payments)
-        const { count: placementsCount } = await supabase
-          .from('payments')
-          .select('*', { count: 'exact', head: true })
-          .eq('status', 'completed');
-
         setStats({
           nannies: nanniesCount || 0,
           cleaners: cleanersCount || 0,
-          clients: clientsCount || 0,
-          placements: placementsCount || 0
+          generalWorkers: generalWorkersCount || 0,
+          promoters: promotersCount || 0,
+          adminAssistants: adminAssistantsCount || 0,
+          clients: clientsCount || 0
         });
       } catch (error) {
         console.error("Error fetching stats:", error);
@@ -296,7 +315,7 @@ export default function Home() {
             <div className="flex items-center gap-3">
               <CheckCircle className="h-6 w-6 animate-pulse" />
               <p className="font-medium">
-                ✓ Your profile is complete! Start browsing for {userRole === 'nanny' ? 'job opportunities' : 'nannies and cleaners'} today.
+                ✓ Your profile is complete! Start browsing for {userRole === 'nanny' ? 'job opportunities' : 'workers'} today.
               </p>
             </div>
             <Button 
@@ -333,9 +352,24 @@ export default function Home() {
                   Find a Cleaner
                 </Button>
               </Link>
+              <Link to="/find-generalworker">
+                <Button size="lg" variant="outline" className="text-lg px-8 bg-white/10 border-white/20 text-white hover:bg-white/20">
+                  Find a General Worker
+                </Button>
+              </Link>
+              <Link to="/find-promoter">
+                <Button size="lg" variant="outline" className="text-lg px-8 bg-white/10 border-white/20 text-white hover:bg-white/20">
+                  Find a Promoter
+                </Button>
+              </Link>
+              <Link to="/find-adminassistant">
+                <Button size="lg" variant="outline" className="text-lg px-8 bg-white/10 border-white/20 text-white hover:bg-white/20">
+                  Find an Admin Assistant
+                </Button>
+              </Link>
               <Link to="/auth">
                 <Button size="lg" variant="outline" className="text-lg px-8 bg-white/10 border-white/20 text-white hover:bg-white/20">
-                  Become a Nanny/Cleaner
+                  Register an Account
                 </Button>
               </Link>
             </div>
@@ -351,6 +385,21 @@ export default function Home() {
                   <Link to="/find-cleaner">
                     <Button size="lg" variant="outline" className="text-lg px-8 bg-white/10 border-white/20 text-white hover:bg-white/20">
                       Find Cleaners
+                    </Button>
+                  </Link>
+                  <Link to="/find-generalworker">
+                    <Button size="lg" variant="outline" className="text-lg px-8 bg-white/10 border-white/20 text-white hover:bg-white/20">
+                      Find General Workers
+                    </Button>
+                  </Link>
+                  <Link to="/find-promoter">
+                    <Button size="lg" variant="outline" className="text-lg px-8 bg-white/10 border-white/20 text-white hover:bg-white/20">
+                      Find Promoters
+                    </Button>
+                  </Link>
+                  <Link to="/find-adminassistant">
+                    <Button size="lg" variant="outline" className="text-lg px-8 bg-white/10 border-white/20 text-white hover:bg-white/20">
+                      Find Admin Assistants
                     </Button>
                   </Link>
                 </>
@@ -403,7 +452,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Find Cleaner Section */}
+      {/* Find Worker Section - UPDATED with all worker types */}
       <section className="py-20 bg-gradient-to-br from-blue-50 to-green-50">
         <div className="container mx-auto px-4">
           <div className="text-center mb-16">
@@ -447,6 +496,104 @@ export default function Home() {
               </Button>
             </Link>
           </div>
+        </div>
+      </section>
+
+      {/* NEW: Other Services Section - General Worker, Promoter, Admin Assistant */}
+      <section className="py-20 bg-gradient-to-br from-purple-50 to-indigo-50">
+        <div className="container mx-auto px-4">
+          <div className="text-center mb-16">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-primary/10 rounded-full mb-6">
+              <Briefcase className="h-8 w-8 text-primary" />
+            </div>
+            <h2 className="text-3xl md:text-4xl font-bold mb-4">
+              Other Services Available
+            </h2>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+              Browse verified workers for general labor, promotions, and administrative support
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-8">
+            {/* General Worker */}
+            <Card className="bg-blue-50 border-0 shadow-lg hover:shadow-xl transition-shadow">
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    <Briefcase className="h-5 w-5 text-blue-600" />
+                    General Worker
+                  </span>
+                  <Badge variant="secondary" className="text-lg px-3 py-1">
+                    R50
+                  </Badge>
+                </CardTitle>
+                <CardDescription className="text-base">
+                  Packing, moving, painting, construction, and general labor tasks
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground mb-6">
+                  Find workers for once-off jobs and general labor tasks. <strong>R50 once-off sourcing fee</strong> to unlock contact details.
+                </p>
+                <Link to="/find-generalworker">
+                  <Button className="w-full">Find General Workers</Button>
+                </Link>
+              </CardContent>
+            </Card>
+
+            {/* Promoter */}
+            <Card className="bg-purple-50 border-0 shadow-lg hover:shadow-xl transition-shadow">
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    <Megaphone className="h-5 w-5 text-purple-600" />
+                    Promoter
+                  </span>
+                  <Badge variant="secondary" className="text-lg px-3 py-1">
+                    R80
+                  </Badge>
+                </CardTitle>
+                <CardDescription className="text-base">
+                  Sales, storefront, distribution, flyers, and product activation
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground mb-6">
+                  Find promoters for your brand, event, or campaign. <strong>R80 once-off sourcing fee</strong> to unlock contact details.
+                </p>
+                <Link to="/find-promoter">
+                  <Button className="w-full">Find Promoters</Button>
+                </Link>
+              </CardContent>
+            </Card>
+
+            {/* Admin Assistant */}
+            <Card className="bg-green-50 border-0 shadow-lg hover:shadow-xl transition-shadow">
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    <ClipboardCheck className="h-5 w-5 text-green-600" />
+                    Admin Assistant
+                  </span>
+                  <Badge variant="secondary" className="text-lg px-3 py-1">
+                    R150
+                  </Badge>
+                </CardTitle>
+                <CardDescription className="text-base">
+                  Filing, documentation, data entry, and basic administrative tasks
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground mb-6">
+                  Find admin assistants for once-off or ongoing support. <strong>R150 once-off sourcing fee</strong> to unlock contact details.
+                </p>
+                <Link to="/find-adminassistant">
+                  <Button className="w-full">Find Admin Assistants</Button>
+                </Link>
+              </CardContent>
+            </Card>
+          </div>
+
         </div>
       </section>
 
@@ -541,6 +688,30 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Stats Section */}
+      {/*<section className="py-12 bg-primary/5">
+        <div className="container mx-auto px-4">
+          <div className="text-center mb-8">
+            <h2 className="text-2xl font-bold">Our Community</h2>
+            <p className="text-muted-foreground">Join thousands of families and workers on our platform</p>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-6 text-center max-w-3xl mx-auto">
+            <div className="p-4 bg-white rounded-lg shadow-sm">
+              <p className="text-3xl font-bold text-primary">{stats.nannies + stats.cleaners}</p>
+              <p className="text-sm text-muted-foreground">Nannies & Cleaners</p>
+            </div>
+            <div className="p-4 bg-white rounded-lg shadow-sm">
+              <p className="text-3xl font-bold text-primary">{stats.generalWorkers + stats.promoters + stats.adminAssistants}</p>
+              <p className="text-sm text-muted-foreground">General Workers</p>
+            </div>
+            <div className="p-4 bg-white rounded-lg shadow-sm">
+              <p className="text-3xl font-bold text-primary">{stats.clients}</p>
+              <p className="text-sm text-muted-foreground">Happy Families</p>
+            </div>
+          </div>
+        </div>
+      </section>*/}
+
       {/* CTA Section */}
       <section className="py-20 bg-gradient-to-r from-primary to-primary/80 text-primary-foreground">
         <div className="container mx-auto px-4 text-center">
@@ -568,9 +739,9 @@ export default function Home() {
                     Browse Nannies
                   </Button>
                 </Link>
-                <Link to="/find-cleaner">
+                <Link to="/find-generalworker">
                   <Button size="lg" variant="outline" className="text-lg px-8 bg-white/10 border-white/20 text-white hover:bg-white/20">
-                    Find Cleaners
+                    Find Workers
                   </Button>
                 </Link>
               </div>
@@ -579,12 +750,12 @@ export default function Home() {
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link to="/find-nanny">
                 <Button size="lg" variant="secondary" className="text-lg px-8">
-                  Browse Available Nannies
+                  Browse Available Workers
                 </Button>
               </Link>
-              <Link to="/find-cleaner">
+              <Link to="/find-generalworker">
                 <Button size="lg" variant="outline" className="text-lg px-8 bg-white/10 border-white/20 text-white hover:bg-white/20">
-                  Browse Available Cleaners
+                  Browse General Workers
                 </Button>
               </Link>
             </div>
@@ -594,6 +765,3 @@ export default function Home() {
     </div>
   );
 }
-
-// Add ArrowRight import
-import { ArrowRight } from "lucide-react";

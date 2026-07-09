@@ -52,7 +52,8 @@ import {
   Globe,
   IdCard,
   Users as UsersIcon,
-  Download
+  Download,
+  RefreshCw
 } from 'lucide-react';
 import {
   Dialog,
@@ -176,6 +177,16 @@ const experienceDurationOptions = [
   { label: '10+ years', value: 15 },
 ];
 
+// All experience types including all options
+const ALL_EXPERIENCE_TYPES = [
+  { value: 'nanny', label: 'Nanny' },
+  { value: 'cleaning', label: 'Cleaner' },
+  { value: 'both', label: 'Nanny & Cleaner' },
+  { value: 'general_worker', label: 'General Worker' },
+  { value: 'promoter', label: 'Promoter' },
+  { value: 'admin_assistant', label: 'Admin Assistant' }
+];
+
 const getExperienceLabel = (duration: number | null): string => {
   if (duration === null) return 'Not specified';
   const option = experienceDurationOptions.find(opt => opt.value >= duration) || experienceDurationOptions[experienceDurationOptions.length - 1];
@@ -200,24 +211,16 @@ const calculateAge = (dateOfBirth: string | null): number | null => {
   }
 };
 
-// Add this helper function near calculateAge function
-const getVideoMimeType = (url: string): string => {
-  const extension = url.split('.').pop()?.toLowerCase();
-  switch (extension) {
-    case 'mp4':
-      return 'video/mp4';
-    case 'webm':
-      return 'video/webm';
-    case 'ogg':
-      return 'video/ogg';
-    case 'mov':
-      return 'video/quicktime';
-    case 'avi':
-      return 'video/x-msvideo';
-    case 'mkv':
-      return 'video/x-matroska';
-    default:
-      return 'video/mp4';
+// Helper function to get experience type display name
+const getExperienceTypeDisplay = (type: string): string => {
+  switch (type) {
+    case 'nanny': return 'Nanny';
+    case 'cleaning': return 'Cleaner';
+    case 'both': return 'Nanny & Cleaner';
+    case 'general_worker': return 'General Worker';
+    case 'promoter': return 'Promoter';
+    case 'admin_assistant': return 'Admin Assistant';
+    default: return 'Unknown';
   }
 };
 
@@ -306,6 +309,10 @@ export default function AdminPanel() {
   const [selectedReview, setSelectedReview] = useState<ReviewComplaint | null>(null);
   const [adminResponse, setAdminResponse] = useState('');
   const [updatingReview, setUpdatingReview] = useState(false);
+
+  // Experience type edit state
+  const [editingExperienceNanny, setEditingExperienceNanny] = useState<NannyProfile | null>(null);
+  const [selectedExperienceType, setSelectedExperienceType] = useState<string>('');
 
   useEffect(() => {
     if (user && userRole === 'admin') {
@@ -709,6 +716,46 @@ export default function AdminPanel() {
     }
   };
 
+  // Update experience type function
+  const updateExperienceType = async (nannyId: string, experienceType: string) => {
+    try {
+      const { error } = await supabase
+        .from('nannies')
+        .update({ experience_type: experienceType })
+        .eq('id', nannyId);
+
+      if (error) throw error;
+
+      // Update local state
+      setNannies(nannies.map((n) => 
+        n.id === nannyId ? { ...n, experience_type: experienceType } : n
+      ));
+
+      // Send notification email to the nanny
+      const nanny = nannies.find((n) => n.id === nannyId);
+      if (nanny) {
+        const typeDisplay = ALL_EXPERIENCE_TYPES.find(t => t.value === experienceType)?.label || experienceType;
+        await sendNannyNotificationEmail({
+          to: nanny.profiles.email,
+          subject: `🔄 Experience Type Updated - Nanny Placements SA`,
+          nanny_name: `${nanny.profiles.first_name} ${nanny.profiles.last_name}`,
+          notification_type: 'profile_updated',
+          message: `Your experience type has been updated to "${typeDisplay}" by the admin. Please review your profile to ensure everything is correct.`
+        }).catch((err) => console.error('Failed to send notification email:', err));
+      }
+
+      toast({ 
+        title: 'Success', 
+        description: `Experience type updated to ${ALL_EXPERIENCE_TYPES.find(t => t.value === experienceType)?.label || experienceType}` 
+      });
+      
+      setEditingExperienceNanny(null);
+      setSelectedExperienceType('');
+    } catch (error: any) {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    }
+  };
+
   const getStatusBadge = (status: ReviewComplaint['status']) => {
     switch (status) {
       case 'pending': return { color: 'bg-yellow-500', text: 'Pending' };
@@ -757,30 +804,30 @@ export default function AdminPanel() {
           <Shield className="h-8 w-8" />
           Admin Panel
         </h1>
-        <p className="text-muted-foreground">Manage nannies, content, reviews, and platform operations</p>
+        <p className="text-muted-foreground">Manage workers, content, reviews, and platform operations</p>
       </div>
 
       <Tabs defaultValue="nannies" className="space-y-6">
         <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="nannies">Nannies</TabsTrigger>
+          <TabsTrigger value="nannies">Workers</TabsTrigger>
           <TabsTrigger value="interests">Interests</TabsTrigger>
           <TabsTrigger value="reviews">Reviews & Complaints</TabsTrigger>
           <TabsTrigger value="academy">Academy</TabsTrigger>
           <TabsTrigger value="payments">Payments</TabsTrigger>
         </TabsList>
 
-        {/* Enhanced Nannies Tab with Complete Profile View */}
+        {/* Enhanced Workers Tab with Complete Profile View */}
         <TabsContent value="nannies" className="space-y-6">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center justify-between gap-2 flex-wrap">
                 <div className="flex items-center gap-2">
                   <Users className="h-5 w-5" />
-                  Nanny Management ({filteredAndSortedNannies.length})
+                  Worker Management ({filteredAndSortedNannies.length})
                 </div>
-                <div className="text-sm text-muted-foreground">Click a nanny to view complete profile</div>
+                <div className="text-sm text-muted-foreground">Click a worker to view complete profile</div>
               </CardTitle>
-              <CardDescription>Review and approve nanny profiles, documents, and qualifications</CardDescription>
+              <CardDescription>Review and approve worker profiles, documents, and qualifications</CardDescription>
             </CardHeader>
 
             <CardContent>
@@ -795,12 +842,13 @@ export default function AdminPanel() {
 
               <div className="space-y-3">
                 {filteredAndSortedNannies.length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground">No nannies found matching your search</div>
+                  <div className="text-center py-12 text-muted-foreground">No workers found matching your search</div>
                 ) : (
                   filteredAndSortedNannies.map((nanny) => {
                     const profile = nanny.profiles;
                     const isExpanded = expandedNannyId === nanny.id;
                     const age = calculateAge(nanny.date_of_birth);
+                    const workerType = getExperienceTypeDisplay(nanny.experience_type);
 
                     return (
                       <div key={nanny.id}>
@@ -823,6 +871,9 @@ export default function AdminPanel() {
                                   <h3 className="font-medium truncate">{profile.first_name} {profile.last_name}</h3>
                                   <p className="text-sm text-muted-foreground truncate">{profile.email}</p>
                                   {age && <p className="text-xs text-muted-foreground">Age: {age} years</p>}
+                                  <Badge variant="outline" className="text-xs mt-1">
+                                    {workerType}
+                                  </Badge>
                                 </div>
                               </div>
                               <div className="flex items-center gap-2 flex-wrap">
@@ -842,7 +893,7 @@ export default function AdminPanel() {
                           </CardContent>
                         </Card>
 
-                        {/* Expanded Full View - Complete Nanny Profile */}
+                        {/* Expanded Full View - Complete Worker Profile */}
                         {isExpanded && (
                           <Card className="mt-2 border-t-4 border-t-primary animate-in fade-in slide-in-from-top-2 duration-300">
                             <CardContent className="p-6 space-y-6">
@@ -860,6 +911,9 @@ export default function AdminPanel() {
                                       <span className="flex items-center gap-1"><Mail className="h-4 w-4" />{profile.email}</span>
                                       {profile.phone && <span className="flex items-center gap-1"><Phone className="h-4 w-4" />{profile.phone}</span>}
                                       <span className="flex items-center gap-1"><MapPin className="h-4 w-4" />{profile.suburb ? `${profile.suburb}, ` : ''}{profile.city || 'No location'}</span>
+                                      <Badge variant="secondary" className="text-xs">
+                                        {workerType}
+                                      </Badge>
                                     </div>
                                     {nanny.nationality && (
                                       <div className="flex items-center gap-1 mt-1 text-sm">
@@ -931,13 +985,30 @@ export default function AdminPanel() {
                                 </div>
                               </div>
 
-                              {/* Professional Information Section */}
+                              {/* Professional Information Section - WITH EXPERIENCE TYPE EDIT */}
                               <div className="border rounded-lg overflow-hidden">
                                 <div className="bg-gray-50 px-4 py-2 border-b">
                                   <h4 className="font-semibold flex items-center gap-2"><Briefcase className="h-4 w-4" /> Professional Information</h4>
                                 </div>
                                 <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                                  <div><p className="text-xs text-muted-foreground">Experience Type</p><p className="font-medium capitalize">{nanny.experience_type}</p></div>
+                                  <div>
+                                    <p className="text-xs text-muted-foreground">Experience Type</p>
+                                    <div className="flex items-center gap-2 mt-1">
+                                      <span className="font-medium capitalize">{getExperienceTypeDisplay(nanny.experience_type)}</span>
+                                      <Button 
+                                        size="sm" 
+                                        variant="ghost" 
+                                        className="h-6 w-6 p-0"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setEditingExperienceNanny(nanny);
+                                          setSelectedExperienceType(nanny.experience_type);
+                                        }}
+                                      >
+                                        <Edit className="h-3 w-3" />
+                                      </Button>
+                                    </div>
+                                  </div>
                                   <div><p className="text-xs text-muted-foreground">Experience Duration</p><p className="font-medium">{getExperienceLabel(nanny.experience_duration)}</p></div>
                                   <div><p className="text-xs text-muted-foreground">Employment Type</p><p className="font-medium capitalize">{nanny.employment_type?.replace('_', ' ') || 'Not specified'}</p></div>
                                   <div><p className="text-xs text-muted-foreground">Hourly Rate</p><p className="font-medium">R{nanny.hourly_rate || 'Not specified'}/hour</p></div>
@@ -1064,86 +1135,83 @@ export default function AdminPanel() {
                                   </div>
 
                                   {/* Interview Video - Enhanced with PiP support */}
-<div className="border rounded-lg p-3">
-  <p className="font-medium text-sm flex items-center gap-2"><Video className="h-4 w-4 text-red-500" /> Interview Video</p>
-  {nanny.interview_video_url ? (
-    <div className="mt-2">
-      <Badge variant="default" className="bg-green-500 mb-2">UPLOADED</Badge>
-      
-      {/* Video container with better display */}
-      <div className="relative bg-black rounded-lg overflow-hidden" style={{ minHeight: '200px' }}>
-        <video 
-          id={`video-${nanny.id}`}
-          controls 
-          className="w-full rounded-lg"
-          style={{ maxHeight: '400px', minHeight: '250px' }}
-          preload="metadata"
-          playsInline
-        >
-          <source src={nanny.interview_video_url} type="video/mp4" />
-          Your browser does not support the video tag.
-        </video>
-      </div>
-      
-      {/* Action buttons */}
-      <div className="flex flex-wrap gap-2 mt-3">
-        <Button 
-          size="sm" 
-          variant="outline"
-          onClick={() => {
-            const video = document.getElementById(`video-${nanny.id}`) as HTMLVideoElement;
-            if (video) {
-              // Enter Picture-in-Picture mode
-              if (document.pictureInPictureEnabled) {
-                if (!document.pictureInPictureElement) {
-                  video.requestPictureInPicture().catch(err => {
-                    console.error('PiP error:', err);
-                    // Fallback: open in new tab
-                    window.open(nanny.interview_video_url, '_blank');
-                  });
-                } else {
-                  document.exitPictureInPicture();
-                }
-              } else {
-                // Fallback: open in new tab
-                window.open(nanny.interview_video_url, '_blank');
-              }
-            }
-          }}
-          className="bg-blue-600 hover:bg-blue-700 text-white"
-        >
-          <Video className="h-3 w-3 mr-1" />
-          Picture-in-Picture Mode
-        </Button>
-        
-        <a 
-          href={nanny.interview_video_url} 
-          target="_blank" 
-          rel="noopener noreferrer" 
-          className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-8 px-3"
-        >
-          <Eye className="h-3 w-3 mr-1" />
-          Open in new tab
-        </a>
-        
-        <a 
-          href={nanny.interview_video_url} 
-          download
-          className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-8 px-3"
-        >
-          <Download className="h-3 w-3 mr-1" />
-          Download
-        </a>
-      </div>
-      
-      <p className="text-xs text-muted-foreground mt-2">
-        💡 Tip: Click "Picture-in-Picture Mode" for the best viewing experience
-      </p>
-    </div>
-  ) : (
-    <p className="text-sm text-muted-foreground mt-2">Not uploaded</p>
-  )}
-</div>
+                                  <div className="border rounded-lg p-3">
+                                    <p className="font-medium text-sm flex items-center gap-2"><Video className="h-4 w-4 text-red-500" /> Interview Video</p>
+                                    {nanny.interview_video_url ? (
+                                      <div className="mt-2">
+                                        <Badge variant="default" className="bg-green-500 mb-2">UPLOADED</Badge>
+                                        
+                                        {/* Video container with better display */}
+                                        <div className="relative bg-black rounded-lg overflow-hidden" style={{ minHeight: '200px' }}>
+                                          <video 
+                                            id={`video-${nanny.id}`}
+                                            controls 
+                                            className="w-full rounded-lg"
+                                            style={{ maxHeight: '400px', minHeight: '250px' }}
+                                            preload="metadata"
+                                            playsInline
+                                          >
+                                            <source src={nanny.interview_video_url} type="video/mp4" />
+                                            Your browser does not support the video tag.
+                                          </video>
+                                        </div>
+                                        
+                                        {/* Action buttons */}
+                                        <div className="flex flex-wrap gap-2 mt-3">
+                                          <Button 
+                                            size="sm" 
+                                            variant="outline"
+                                            onClick={() => {
+                                              const video = document.getElementById(`video-${nanny.id}`) as HTMLVideoElement;
+                                              if (video) {
+                                                if (document.pictureInPictureEnabled) {
+                                                  if (!document.pictureInPictureElement) {
+                                                    video.requestPictureInPicture().catch(err => {
+                                                      console.error('PiP error:', err);
+                                                      window.open(nanny.interview_video_url, '_blank');
+                                                    });
+                                                  } else {
+                                                    document.exitPictureInPicture();
+                                                  }
+                                                } else {
+                                                  window.open(nanny.interview_video_url, '_blank');
+                                                }
+                                              }
+                                            }}
+                                            className="bg-blue-600 hover:bg-blue-700 text-white"
+                                          >
+                                            <Video className="h-3 w-3 mr-1" />
+                                            Picture-in-Picture Mode
+                                          </Button>
+                                          
+                                          <a 
+                                            href={nanny.interview_video_url} 
+                                            target="_blank" 
+                                            rel="noopener noreferrer" 
+                                            className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-8 px-3"
+                                          >
+                                            <Eye className="h-3 w-3 mr-1" />
+                                            Open in new tab
+                                          </a>
+                                          
+                                          <a 
+                                            href={nanny.interview_video_url} 
+                                            download
+                                            className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-8 px-3"
+                                          >
+                                            <Download className="h-3 w-3 mr-1" />
+                                            Download
+                                          </a>
+                                        </div>
+                                        
+                                        <p className="text-xs text-muted-foreground mt-2">
+                                          💡 Tip: Click "Picture-in-Picture Mode" for the best viewing experience
+                                        </p>
+                                      </div>
+                                    ) : (
+                                      <p className="text-sm text-muted-foreground mt-2">Not uploaded</p>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
 
@@ -1187,10 +1255,10 @@ export default function AdminPanel() {
                                 <Button size="sm" variant={nanny.profile_approved ? 'secondary' : 'default'} onClick={() => approveProfile(nanny.id, !nanny.profile_approved)} className={nanny.profile_approved ? 'bg-red-100 text-red-800 hover:bg-red-200' : 'bg-green-600 hover:bg-green-700'}>
                                   {nanny.profile_approved ? (<><X className="h-4 w-4 mr-2" /> Revoke Profile Approval</>) : (<><CheckCircle className="h-4 w-4 mr-2" /> Approve Full Profile</>)}
                                 </Button>
-                                <Button size="sm" variant="outline" onClick={() => { const subject = `Regarding your Nanny Profile - ${profile.first_name}`; const body = `Dear ${profile.first_name},\n\n`; window.location.href = `mailto:${profile.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`; }}>
-                                  <Mail className="h-4 w-4 mr-2" /> Email Nanny
+                                <Button size="sm" variant="outline" onClick={() => { const subject = `Regarding your Worker Profile - ${profile.first_name}`; const body = `Dear ${profile.first_name},\n\n`; window.location.href = `mailto:${profile.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`; }}>
+                                  <Mail className="h-4 w-4 mr-2" /> Email Worker
                                 </Button>
-                                {profile.phone && (<Button size="sm" variant="outline" onClick={() => (window.location.href = `tel:${profile.phone}`)}><Phone className="h-4 w-4 mr-2" /> Call Nanny</Button>)}
+                                {profile.phone && (<Button size="sm" variant="outline" onClick={() => (window.location.href = `tel:${profile.phone}`)}><Phone className="h-4 w-4 mr-2" /> Call Worker</Button>)}
                               </div>
                             </CardContent>
                           </Card>
@@ -1228,14 +1296,14 @@ export default function AdminPanel() {
                               <p><strong>Submitted:</strong> {new Date(interest.created_at).toLocaleString('en-ZA', { dateStyle: 'medium', timeStyle: 'short' })}</p>
                             </div>
                             <div className="space-y-2">
-                              <h4 className="font-semibold text-lg text-green-700">Nanny Information</h4>
+                              <h4 className="font-semibold text-lg text-green-700">Worker Information</h4>
                               <p><strong>Name:</strong> {interest.nanny_first_name} {interest.nanny_last_name}</p>
                               <p><strong>Email:</strong> {interest.nanny_email}</p>
                               <p><strong>Status:</strong> <Badge className={interest.status === 'approved' ? 'bg-green-500' : interest.status === 'declined' ? 'bg-red-500' : 'bg-yellow-500'}>{interest.status?.toUpperCase()}</Badge></p>
                             </div>
                           </div>
                           {interest.message && (<div className="p-4 bg-gray-50 rounded-lg"><p className="font-medium text-gray-700 mb-2">Client's Message:</p><p className="text-gray-600 italic">"{interest.message}"</p></div>)}
-                          {interest.nanny_response && (<div className="p-4 bg-blue-50 rounded-lg"><p className="font-medium text-blue-700 mb-2">Nanny's Response:</p><p className="text-blue-600">"{interest.nanny_response}"</p></div>)}
+                          {interest.nanny_response && (<div className="p-4 bg-blue-50 rounded-lg"><p className="font-medium text-blue-700 mb-2">Worker's Response:</p><p className="text-blue-600">"{interest.nanny_response}"</p></div>)}
                           <div className="flex items-center gap-4 text-sm">
                             <div><span className="font-medium">Payment Status:</span> <Badge variant={interest.payment_status === 'completed' ? 'default' : 'secondary'}>{interest.payment_status || 'pending'}</Badge></div>
                             <div><span className="font-medium">Admin Approved:</span> <Badge variant={interest.admin_approved ? 'default' : 'outline'}>{interest.admin_approved ? 'Yes' : 'No'}</Badge></div>
@@ -1261,13 +1329,13 @@ export default function AdminPanel() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2"><MessageSquare className="h-5 w-5" /> Reviews & Complaints Management ({filteredReviewsComplaints.length})</CardTitle>
-              <CardDescription>Manage client reviews and complaints for nannies and cleaners</CardDescription>
+              <CardDescription>Manage client reviews and complaints for workers</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                 <div><Label htmlFor="type-filter">Type</Label><Select value={filterType} onValueChange={(value: any) => setFilterType(value)}><SelectTrigger><SelectValue placeholder="Filter by type" /></SelectTrigger><SelectContent><SelectItem value="all">All Types</SelectItem><SelectItem value="review">Reviews Only</SelectItem><SelectItem value="complaint">Complaints Only</SelectItem></SelectContent></Select></div>
                 <div><Label htmlFor="status-filter">Status</Label><Select value={filterStatus} onValueChange={(value: any) => setFilterStatus(value)}><SelectTrigger><SelectValue placeholder="Filter by status" /></SelectTrigger><SelectContent><SelectItem value="all">All Statuses</SelectItem><SelectItem value="pending">Pending</SelectItem><SelectItem value="resolved">Resolved</SelectItem><SelectItem value="dismissed">Dismissed</SelectItem><SelectItem value="archived">Archived</SelectItem></SelectContent></Select></div>
-                <div className="md:col-span-2"><Label htmlFor="review-search">Search</Label><div className="relative"><Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" /><Input id="review-search" placeholder="Search by nanny name, client name, or complaint text..." value={reviewSearch} onChange={(e) => setReviewSearch(e.target.value)} className="pl-10" /></div></div>
+                <div className="md:col-span-2"><Label htmlFor="review-search">Search</Label><div className="relative"><Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" /><Input id="review-search" placeholder="Search by worker name, client name, or complaint text..." value={reviewSearch} onChange={(e) => setReviewSearch(e.target.value)} className="pl-10" /></div></div>
               </div>
 
               {reviewsLoading ? (<div className="text-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div><p className="mt-2 text-muted-foreground">Loading reviews and complaints...</p></div>
@@ -1281,14 +1349,14 @@ export default function AdminPanel() {
                         {isReview && item.rating && (<div className="flex items-center gap-2"><div className="flex">{Array.from({ length: 5 }).map((_, i) => (<Star key={i} className={`h-5 w-5 ${i < item.rating! ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'}`} />))}</div><span className="font-medium">{item.rating}/5</span></div>)}
                         {item.complaint_text && (<div className="p-4 bg-red-50 rounded-lg border border-red-100"><p className="font-medium text-red-700 mb-2">Complaint Details:</p><p className="text-red-600">{item.complaint_text}</p></div>)}
                         {item.admin_response && (<div className="p-4 bg-blue-50 rounded-lg border border-blue-100"><div className="flex items-center gap-2 mb-2"><Shield className="h-4 w-4 text-blue-600" /><p className="font-medium text-blue-700">Admin Response:</p></div><p className="text-blue-600">{item.admin_response}</p><p className="text-xs text-blue-500 mt-2">Updated: {new Date(item.updated_at).toLocaleDateString()}</p></div>)}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t"><div><p className="text-sm font-medium text-muted-foreground">Client Information</p><p>{item.client_first_name} {item.client_last_name}</p><p className="text-sm text-muted-foreground">{item.client_email}</p></div><div><p className="text-sm font-medium text-muted-foreground">Nanny/Cleaner Information</p><p>{item.nanny_first_name} {item.nanny_last_name}</p><p className="text-sm text-muted-foreground">{item.nanny_email}</p></div></div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t"><div><p className="text-sm font-medium text-muted-foreground">Client Information</p><p>{item.client_first_name} {item.client_last_name}</p><p className="text-sm text-muted-foreground">{item.client_email}</p></div><div><p className="text-sm font-medium text-muted-foreground">Worker Information</p><p>{item.nanny_first_name} {item.nanny_last_name}</p><p className="text-sm text-muted-foreground">{item.nanny_email}</p></div></div>
                       </div>
                       <div className="flex flex-col gap-2 min-w-[200px]">
                         {item.status === 'pending' && (<><Button size="sm" variant="default" className="bg-green-600 hover:bg-green-700" onClick={() => setSelectedReview(item)}><CheckCircle className="h-4 w-4 mr-2" /> Respond & Resolve</Button><Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => updateReviewStatus(item.id, 'dismissed')}><X className="h-4 w-4 mr-2" /> Dismiss</Button></>)}
                         {item.status === 'resolved' && (<Button size="sm" variant="outline" className="text-blue-600 border-blue-200 hover:bg-blue-50" onClick={() => setSelectedReview(item)}><Edit className="h-4 w-4 mr-2" /> Update Response</Button>)}
                         {item.status !== 'archived' && (<Button size="sm" variant="ghost" className="text-gray-600 hover:bg-gray-100" onClick={() => archiveReview(item.id)}><Archive className="h-4 w-4 mr-2" /> Archive</Button>)}
                         <Button size="sm" variant="outline" onClick={() => { const subject = `Regarding your ${isReview ? 'review' : 'complaint'} about ${item.nanny_first_name}`; const body = `Dear ${item.client_first_name},\n\nRegarding your ${isReview ? 'review' : 'complaint'} about ${item.nanny_first_name} ${item.nanny_last_name}:\n\n`; window.location.href = `mailto:${item.client_email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`; }}><Mail className="h-4 w-4 mr-2" /> Email Client</Button>
-                        <Button size="sm" variant="outline" onClick={() => { const subject = `Regarding client ${isReview ? 'review' : 'complaint'}`; const body = `Dear ${item.nanny_first_name},\n\nRegarding a ${isReview ? 'review' : 'complaint'} from ${item.client_first_name} ${item.client_last_name}:\n\n`; window.location.href = `mailto:${item.nanny_email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`; }}><Mail className="h-4 w-4 mr-2" /> Email Nanny</Button>
+                        <Button size="sm" variant="outline" onClick={() => { const subject = `Regarding client ${isReview ? 'review' : 'complaint'}`; const body = `Dear ${item.nanny_first_name},\n\nRegarding a ${isReview ? 'review' : 'complaint'} from ${item.client_first_name} ${item.client_last_name}:\n\n`; window.location.href = `mailto:${item.nanny_email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`; }}><Mail className="h-4 w-4 mr-2" /> Email Worker</Button>
                       </div>
                     </div>
                   </CardContent>
@@ -1301,10 +1369,10 @@ export default function AdminPanel() {
         {/* Academy Tab */}
         <TabsContent value="academy" className="space-y-6">
           <Card>
-            <CardHeader><CardTitle className="flex items-center gap-2"><Video className="h-5 w-5" /> Academy Videos Management ({academyVideos.length})</CardTitle><CardDescription>Manage nanny training content and videos</CardDescription></CardHeader>
+            <CardHeader><CardTitle className="flex items-center gap-2"><Video className="h-5 w-5" /> Academy Videos Management ({academyVideos.length})</CardTitle><CardDescription>Manage worker training content and videos</CardDescription></CardHeader>
             <CardContent className="space-y-6">
               <Dialog><DialogTrigger asChild><Button className="bg-blue-600 hover:bg-blue-700"><Plus className="h-4 w-4 mr-2" /> Add New Academy Video</Button></DialogTrigger>
-                <DialogContent className="max-w-2xl"><DialogHeader><DialogTitle>Create New Academy Video</DialogTitle><DialogDescription>Add a new training video to the nanny academy.</DialogDescription></DialogHeader>
+                <DialogContent className="max-w-2xl"><DialogHeader><DialogTitle>Create New Academy Video</DialogTitle><DialogDescription>Add a new training video to the worker academy.</DialogDescription></DialogHeader>
                   <div className="space-y-4 py-4"><div><Label htmlFor="title">Video Title *</Label><Input id="title" value={newVideo.title} onChange={(e) => setNewVideo({ ...newVideo, title: e.target.value })} placeholder="e.g., Child Safety Basics" /></div>
                   <div><Label htmlFor="description">Description</Label><Textarea id="description" value={newVideo.description} onChange={(e) => setNewVideo({ ...newVideo, description: e.target.value })} placeholder="Brief description of the video content" rows={3} /></div>
                   <div><Label htmlFor="video_url">Video URL *</Label><Input id="video_url" value={newVideo.video_url} onChange={(e) => setNewVideo({ ...newVideo, video_url: e.target.value })} placeholder="https://example.com/video.mp4" /></div>
@@ -1336,9 +1404,84 @@ export default function AdminPanel() {
         <DialogContent className="max-w-2xl">
           <DialogHeader><DialogTitle>{selectedReview?.rating !== null ? 'Respond to Review' : 'Respond to Complaint'}</DialogTitle><DialogDescription>Add your response and update the status. Your response will be emailed to both parties.</DialogDescription></DialogHeader>
           {selectedReview && (<div className="space-y-4 py-4"><div className="p-4 bg-gray-50 rounded-lg"><div className="flex justify-between items-start mb-2"><div><p className="font-medium">{selectedReview.rating !== null ? 'Review' : 'Complaint'} from {selectedReview.client_first_name} {selectedReview.client_last_name}</p><p className="text-sm text-muted-foreground">About {selectedReview.nanny_first_name} {selectedReview.nanny_last_name}</p></div>{selectedReview.rating && (<div className="flex items-center gap-1">{Array.from({ length: 5 }).map((_, i) => (<Star key={i} className={`h-4 w-4 ${i < selectedReview.rating! ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'}`} />))}</div>)}</div>{selectedReview.complaint_text && (<div className="mt-3"><p className="text-sm font-medium text-red-700 mb-1">Complaint:</p><p className="text-sm text-red-600">{selectedReview.complaint_text}</p></div>)}</div>
-          <div><Label htmlFor="admin-response" className="mb-2 block">Your Response (will be sent via email)</Label><Textarea id="admin-response" placeholder="Enter your response here. This will be sent to both the client and the nanny/cleaner..." value={adminResponse} onChange={(e) => setAdminResponse(e.target.value)} rows={6} className="w-full" /></div>
+          <div><Label htmlFor="admin-response" className="mb-2 block">Your Response (will be sent via email)</Label><Textarea id="admin-response" placeholder="Enter your response here. This will be sent to both the client and the worker..." value={adminResponse} onChange={(e) => setAdminResponse(e.target.value)} rows={6} className="w-full" /></div>
           <div className="grid grid-cols-2 gap-4"><Button onClick={() => updateReviewStatus(selectedReview.id, 'resolved', adminResponse)} disabled={updatingReview || !adminResponse.trim()} className="bg-green-600 hover:bg-green-700">{updatingReview ? (<><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>Processing...</>) : (<><CheckCircle className="h-4 w-4 mr-2" /> Mark as Resolved</>)}</Button>
           <Button onClick={() => updateReviewStatus(selectedReview.id, 'dismissed', adminResponse)} disabled={updatingReview} variant="outline" className="text-red-600 border-red-200 hover:bg-red-50"><X className="h-4 w-4 mr-2" /> Dismiss</Button></div></div>)}
+        </DialogContent>
+      </Dialog>
+
+      {/* Experience Type Update Dialog */}
+      <Dialog open={!!editingExperienceNanny} onOpenChange={() => { 
+        setEditingExperienceNanny(null); 
+        setSelectedExperienceType('');
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Briefcase className="h-5 w-5" />
+              Update Experience Type
+            </DialogTitle>
+            <DialogDescription>
+              Change the experience type for {editingExperienceNanny?.profiles?.first_name} {editingExperienceNanny?.profiles?.last_name}
+            </DialogDescription>
+          </DialogHeader>
+          
+          {editingExperienceNanny && (
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Current Experience Type</Label>
+                <Badge variant="outline" className="text-sm py-1 px-3">
+                  {getExperienceTypeDisplay(editingExperienceNanny.experience_type)}
+                </Badge>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="new-experience-type">New Experience Type *</Label>
+                <Select value={selectedExperienceType} onValueChange={setSelectedExperienceType}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select new experience type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ALL_EXPERIENCE_TYPES.map((type) => (
+                      <SelectItem key={type.value} value={type.value}>
+                        {type.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mt-4">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5" />
+                  <div>
+                    <p className="text-sm text-amber-800 font-medium">Note:</p>
+                    <p className="text-xs text-amber-700">
+                      Changing the experience type will update the worker's profile and may affect how they appear in client searches. 
+                      The worker will receive a notification email about this change.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              <DialogFooter>
+                <Button variant="outline" onClick={() => {
+                  setEditingExperienceNanny(null);
+                  setSelectedExperienceType('');
+                }}>
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={() => updateExperienceType(editingExperienceNanny.id, selectedExperienceType)}
+                  disabled={!selectedExperienceType || selectedExperienceType === editingExperienceNanny.experience_type}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Update Experience Type
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

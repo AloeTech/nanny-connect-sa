@@ -1,6 +1,6 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Search, Shield, GraduationCap, Users, DollarSign, CheckCircle } from 'lucide-react';
+import { Search, Shield, GraduationCap, Users, DollarSign, CheckCircle, Heart } from 'lucide-react';
 import ContactForm from '@/components/ContactForm';
 
 export default function About() {
@@ -9,14 +9,27 @@ export default function About() {
       <div className="container mx-auto px-4 py-16">
         {/* Hero Section */}
         <div className="text-center mb-16">
-          <h1 className="text-4xl md:text-6xl font-bold text-foreground mb-6">
-            About Nanny Placements SA
-          </h1>
-          <p className="text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
-            Connecting South African families with trusted, nannies through our comprehensive 
-            vetting process and foundational training programs.
-          </p>
-        </div>
+  <div className="inline-flex items-center justify-center p-3 rounded-xl bg-primary/10 text-primary mb-4">
+    <Heart className="h-10 w-10" />
+  </div>
+  <h1 className="text-4xl md:text-6xl font-bold text-foreground mb-4 tracking-tight">
+    About Nanny Placements SA
+  </h1>
+  <div className="flex items-center justify-center gap-3 mb-4">
+    <span className="inline-flex items-center rounded-full bg-primary/10 px-4 py-1 text-sm font-medium text-primary">
+      Trusted Platform
+    </span>
+  </div>
+  <p className="text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed font-medium tracking-wide">
+    Connecting South African families with trusted, <span className="text-primary font-semibold bg-primary/5 px-2 py-0.5 rounded">nannies</span> through our comprehensive vetting process and foundational training programs.
+  </p>
+  <div className="flex flex-wrap justify-center gap-3 mt-4">
+    <span className="text-sm text-muted-foreground">✓ Verified nannies</span>
+    <span className="text-sm text-muted-foreground">✓ Background checks</span>
+    <span className="text-sm text-muted-foreground">✓ Training programs</span>
+    <span className="text-sm text-muted-foreground">✓ Trusted by families</span>
+  </div>
+</div>
 
         {/* Vision & Mission */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-16">

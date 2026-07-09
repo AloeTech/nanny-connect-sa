@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Heart, MapPin, CheckCircle, X, Eye, CreditCard, Loader2, Star, Flag, MessageSquare, ShieldCheck } from "lucide-react";
+import { Heart, MapPin, CheckCircle, X, Eye, CreditCard, Loader2, Star, Flag, MessageSquare, ShieldCheck, Baby } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -781,6 +781,7 @@ export default function FindNanny() {
     };
   }, []);
 
+  // FIXED: fetchNannies - ONLY shows nannies (nanny or both), NOT cleaners
   const fetchNannies = async () => {
     try {
       let query = supabase
@@ -799,7 +800,8 @@ export default function FindNanny() {
             phone,
             user_type
           )
-        `);
+        `)
+        .in('experience_type', ['nanny', 'both']); // <-- ONLY NANNIES, EXCLUDES CLEANERS
 
       if (userRole !== 'admin') {
         query = query.eq('profile_approved', true);
@@ -808,7 +810,7 @@ export default function FindNanny() {
       const { data, error } = await query;
       if (error) throw error;
       
-      console.log('Fetched nannies data:', data);
+      console.log('Fetched nannies data (nanny & both only):', data);
       setNannies(data || []);
     } catch (error) {
       console.error('Error fetching nannies:', error);
@@ -1566,12 +1568,34 @@ export default function FindNanny() {
         nannyName={pendingPaymentDetails ? getNannyProfileInfo(pendingPaymentDetails.nanny).first_name : ''}
       />
 
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-4">Find Your Needed Nanny</h1>
-        <p className="text-muted-foreground">
-          Browse verified, online trained nannies in your area
-        </p>
+      <div className="mb-10">
+  <div className="flex items-center gap-4 mb-3">
+    <div className="p-3 rounded-xl bg-primary/10 text-primary">
+      <Baby className="h-8 w-8" />
+    </div>
+    <div>
+      <h1 className="text-3xl md:text-4xl font-bold tracking-tight">
+        Find An Experienced Nanny in Your Area
+      </h1>
+      <div className="flex items-center gap-3 mt-1">
+        <span className="inline-flex items-center rounded-full bg-primary/10 px-3 py-0.5 text-sm font-medium text-primary">
+          Trusted by Families
+        </span>
       </div>
+    </div>
+  </div>
+  
+  {/* STYLE D: Professional descriptions */}
+  <p className="text-muted-foreground text-base md:text-lg font-medium tracking-wide ml-0 md:ml-[76px]">
+    Browse verified, <span className="text-primary font-semibold bg-primary/5 px-1.5 py-0.5 rounded">online trained nannies</span> in your area
+  </p>
+  
+  <div className="flex flex-wrap gap-3 mt-3 ml-0 md:ml-[76px]">
+    <span className="text-sm text-muted-foreground">✓ Verified profiles</span>
+    <span className="text-sm text-muted-foreground">✓ Background checked</span>
+    <span className="text-sm text-muted-foreground">✓ Online trained</span>
+  </div>
+</div>
 
       <Card className="mb-8">
         <CardHeader>
@@ -1597,8 +1621,8 @@ export default function FindNanny() {
                 <SelectContent>
                   <SelectItem value="all">Any experience</SelectItem>
                   <SelectItem value="nanny">Nanny only</SelectItem>
-                  <SelectItem value="cleaning">Cleaning only</SelectItem>
                   <SelectItem value="both">Both nanny & cleaning</SelectItem>
+                  {/* REMOVED: <SelectItem value="cleaning">Cleaning only</SelectItem> */}
                 </SelectContent>
               </Select>
             </div>

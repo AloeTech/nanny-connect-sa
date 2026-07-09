@@ -30,7 +30,7 @@ interface NannyProfile {
   user_id: string;
   bio: string;
   languages: string[];
-  experience_type: 'nanny' | 'cleaning' | 'both';
+  experience_type: 'nanny' | 'cleaning' | 'both' | 'general_worker' | 'promoter' | 'admin_assistant';
   employment_type: 'part_time' | 'full_time';
   experience_duration: number;
   education_level: 'high school no matric' | 'matric' | 'certificate' | 'diploma' | 'degree';
@@ -52,11 +52,11 @@ interface NannyProfile {
   created_at: string;
   updated_at: string;
   cv_url: string;
-  id_document_url: string;  // NEW: ID/Passport document
-  nationality: string;       // NEW: Nationality field
-  emergency_contact_name: string;  // NEW
-  emergency_contact_relationship: string;  // NEW
-  emergency_contact_phone: string;  // NEW
+  id_document_url: string;
+  nationality: string;
+  emergency_contact_name: string;
+  emergency_contact_relationship: string;
+  emergency_contact_phone: string;
 }
 
 interface ClientProfile {
@@ -72,7 +72,16 @@ const SA_LANGUAGES = [
   'Pedi', 'Venda', 'Tsonga', 'Swati', 'Ndebele', 'Shona', 'Chewa'
 ];
 
-const EXPERIENCE_TYPES: ('nanny' | 'cleaning' | 'both')[] = ['nanny', 'cleaning', 'both'];
+// Updated EXPERIENCE_TYPES with all options
+const EXPERIENCE_TYPES: ('nanny' | 'cleaning' | 'both' | 'general_worker' | 'promoter' | 'admin_assistant')[] = [
+  'nanny', 
+  'cleaning', 
+  'both', 
+  'general_worker', 
+  'promoter', 
+  'admin_assistant'
+];
+
 const EDUCATION_LEVELS: ('high school no matric' | 'matric' | 'certificate' | 'diploma' | 'degree')[] = ['high school no matric', 'matric', 'certificate', 'diploma', 'degree'];
 const EMPLOYMENT_TYPES: ('full_time' | 'part_time')[] = ['full_time', 'part_time'];
 const ACCOMMODATION_TYPES: ('live_in' | 'stay_out')[] = ['live_in', 'stay_out'];
@@ -118,7 +127,6 @@ export default function Profile() {
 
   const fetchProfile = async () => {
     try {
-      // Fetch user profile
       const { data: profile } = await supabase
         .from('profiles')
         .select('*')
@@ -129,7 +137,6 @@ export default function Profile() {
         setUserProfile(profile);
       }
 
-      // Fetch role-specific profile
       if (userRole === 'nanny') {
         const { data: nanny } = await supabase
           .from('nannies')
@@ -267,7 +274,6 @@ export default function Profile() {
     const file = event.target.files?.[0];
     if (!file || !nannyProfile) return;
 
-    // Validate file type
     const validVideoTypes = ['video/mp4', 'video/quicktime', 'video/webm', 'video/avi'];
     if (!validVideoTypes.includes(file.type)) {
       toast({
@@ -278,7 +284,6 @@ export default function Profile() {
       return;
     }
 
-    // Check file size (max 50MB)
     if (file.size > 50 * 1024 * 1024) {
       toast({
         title: "File too large",
@@ -291,12 +296,10 @@ export default function Profile() {
     setUploading(prev => ({ ...prev, video: true }));
     
     try {
-      // Get file extension and create unique filename
       const fileExt = file.name.split('.').pop();
       const fileName = `${user?.id}/interview_video-${Date.now()}.${fileExt}`;
       const bucketName = 'interview-videos';
 
-      // Upload to Supabase Storage
       const { error: uploadError } = await supabase.storage
         .from(bucketName)
         .upload(fileName, file, {
@@ -309,14 +312,12 @@ export default function Profile() {
         throw new Error(`Upload failed: ${uploadError.message}`);
       }
 
-      // Get public URL
       const { data: urlData } = supabase.storage
         .from(bucketName)
         .getPublicUrl(fileName);
       
       const publicUrl = urlData.publicUrl;
 
-      // Update nanny profile with the video URL
       const { error: updateError } = await supabase
         .from('nannies')
         .update({ 
@@ -326,7 +327,6 @@ export default function Profile() {
 
       if (updateError) throw updateError;
 
-      // Update local state
       setNannyProfile(prev => prev ? { 
         ...prev, 
         interview_video_url: publicUrl 
@@ -346,7 +346,6 @@ export default function Profile() {
       });
     } finally {
       setUploading(prev => ({ ...prev, video: false }));
-      // Clear the file input
       event.target.value = '';
     }
   };
@@ -355,9 +354,8 @@ export default function Profile() {
     const file = event.target.files?.[0];
     if (!file || !nannyProfile) return;
 
-    // Validate file type
     let validTypes = ['application/pdf', 'image/jpeg', 'image/png'];
-    let maxSize = 10 * 1024 * 1024; // 10MB
+    let maxSize = 10 * 1024 * 1024;
     
     if (fileType === 'cv') {
       validTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
@@ -380,7 +378,6 @@ export default function Profile() {
       return;
     }
 
-    // Check file size
     if (file.size > maxSize) {
       toast({
         title: "File too large",
@@ -727,7 +724,6 @@ export default function Profile() {
                     </div>
                   </div>
 
-                  {/* ID/Passport Upload Section - NEW */}
                   <div>
                     <Label htmlFor="id_document">ID / Passport</Label>
                     <div className="border-2 border-dashed border-border rounded-lg p-4 text-center">
@@ -857,7 +853,6 @@ export default function Profile() {
                     </div>
                   </div>
 
-                  {/* CV Upload Section */}
                   <div>
                     <Label htmlFor="cv">Curriculum Vitae (CV) / Resume</Label>
                     <div className="border-2 border-dashed border-border rounded-lg p-4 text-center">
@@ -894,7 +889,6 @@ export default function Profile() {
                     </div>
                   </div>
 
-                  {/* Nationality Field - NEW */}
                   <div>
                     <Label htmlFor="nationality">Nationality</Label>
                     <Select 
@@ -912,7 +906,6 @@ export default function Profile() {
                     </Select>
                   </div>
 
-                  {/* Emergency Contact Section - NEW */}
                   <div className="border rounded-lg p-4 space-y-4">
                     <h4 className="font-semibold text-md flex items-center gap-2">
                       <User className="h-4 w-4" />
@@ -1014,7 +1007,7 @@ export default function Profile() {
                       <Label htmlFor="experience_type">Experience Type</Label>
                       <Select 
                         value={nannyProfile.experience_type} 
-                        onValueChange={(value) => setNannyProfile({...nannyProfile, experience_type: value as 'nanny' | 'cleaning' | 'both'})}
+                        onValueChange={(value) => setNannyProfile({...nannyProfile, experience_type: value as 'nanny' | 'cleaning' | 'both' | 'general_worker' | 'promoter' | 'admin_assistant'})}
                       >
                         <SelectTrigger>
                           <SelectValue />
@@ -1022,7 +1015,10 @@ export default function Profile() {
                         <SelectContent>
                           {EXPERIENCE_TYPES.map(type => (
                             <SelectItem key={type} value={type}>
-                              {type.charAt(0).toUpperCase() + type.slice(1)}
+                              {type === 'general_worker' ? 'General Worker' :
+                               type === 'admin_assistant' ? 'Admin Assistant' :
+                               type === 'promoter' ? 'Promoter' :
+                               type.charAt(0).toUpperCase() + type.slice(1)}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -1062,7 +1058,8 @@ export default function Profile() {
                         <SelectContent>
                           {EDUCATION_LEVELS.map(level => (
                             <SelectItem key={level} value={level}>
-                              {level.charAt(0).toUpperCase() + level.slice(1)}
+                              {level === 'high school no matric' ? 'No Matric' :
+                               level.charAt(0).toUpperCase() + level.slice(1)}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -1209,7 +1206,10 @@ export default function Profile() {
                         <SelectContent>
                           {EXPERIENCE_TYPES.map(type => (
                             <SelectItem key={type} value={type}>
-                              {type.charAt(0).toUpperCase() + type.slice(1)}
+                              {type === 'general_worker' ? 'General Worker' :
+                               type === 'admin_assistant' ? 'Admin Assistant' :
+                               type === 'promoter' ? 'Promoter' :
+                               type.charAt(0).toUpperCase() + type.slice(1)}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -1280,7 +1280,6 @@ export default function Profile() {
                 <p className="text-sm text-muted-foreground mb-4">
                   To change your password, you'll need to email admin@nannyplacements.co.za 
                 </p>
-              
               </div>             
               <div className="border-t pt-4">
                 <h4 className="font-medium mb-2 text-destructive">Danger Zone</h4>

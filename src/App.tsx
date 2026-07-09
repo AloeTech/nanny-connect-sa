@@ -8,7 +8,10 @@ import Navbar from "@/components/Layout/Navbar";
 import Home from "./pages/Home";
 import Auth from "./pages/Auth";
 import FindNanny from "./pages/FindNanny";
-import FindCleaner from "./pages/FindCleaner"; // Import the FindCleaner component
+import FindCleaner from "./pages/FindCleaner";
+import FindGeneralWorker from "./pages/FindGeneralWorker";
+import FindPromoter from "./pages/FindPromoter";
+import FindAdminAssistant from "./pages/FindAdminAssistant";
 import Academy from "./pages/Academy";
 import NannyDashboard from "./pages/NannyDashboard";
 import ClientDashboard from "./pages/ClientDashboard";
@@ -33,8 +36,14 @@ const App = () => (
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/auth" element={<Auth />} />
+              
+              {/* Worker Find Pages */}
               <Route path="/find-nanny" element={<FindNanny />} />
-              <Route path="/find-cleaner" element={<FindCleaner />} /> {/* Added FindCleaner route */}
+              <Route path="/find-cleaner" element={<FindCleaner />} />
+              <Route path="/find-generalworker" element={<FindGeneralWorker />} />
+              <Route path="/find-promoter" element={<FindPromoter />} />
+              <Route path="/find-adminassistant" element={<FindAdminAssistant />} />
+              
               <Route path="/register-nanny" element={<Auth />} />
               <Route path="/nanny-dashboard" element={<NannyDashboard />} />
               <Route path="/client-dashboard" element={<ClientDashboard />} />

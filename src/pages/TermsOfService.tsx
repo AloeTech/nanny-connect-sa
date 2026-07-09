@@ -8,19 +8,34 @@ export default function TermsOfService() {
     <div className="min-h-screen bg-gradient-to-br from-primary/5 to-accent/10">
       <div className="container mx-auto px-4 py-16">
         {/* Header */}
-        <div className="text-center mb-12">
-          <div className="flex items-center justify-center gap-3 mb-6">
-            <FileText className="w-12 h-12 text-primary" />
-            <h1 className="text-4xl md:text-5xl font-bold text-foreground">Terms of Service</h1>
-          </div>
-          <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Please read these terms carefully before using Nanny Placements SA services
-          </p>
-          <div className="flex items-center justify-center gap-2 mt-4">
-            <Calendar className="w-4 h-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Last updated: January 26, 2025</span>
-          </div>
-        </div>
+        <div className="text-center mb-16">
+  <div className="flex items-center justify-center gap-4 mb-4">
+    <div className="p-3 rounded-xl bg-primary/10 text-primary">
+      <FileText className="h-10 w-10" />
+    </div>
+    <h1 className="text-4xl md:text-5xl font-bold text-foreground tracking-tight">
+      Terms of Service
+    </h1>
+  </div>
+  <div className="flex items-center justify-center gap-3 mb-4">
+    <span className="inline-flex items-center rounded-full bg-primary/10 px-4 py-1 text-sm font-medium text-primary">
+      Legal Agreement
+    </span>
+  </div>
+  <p className="text-lg text-muted-foreground max-w-2xl mx-auto font-medium tracking-wide">
+    Please read these terms carefully before using <span className="text-primary font-semibold bg-primary/5 px-2 py-0.5 rounded">Nanny Placements SA</span> services
+  </p>
+  <div className="flex items-center justify-center gap-2 mt-4 text-muted-foreground">
+    <Calendar className="w-4 h-4" />
+    <span className="text-sm font-medium">Last updated: January 26, 2025</span>
+  </div>
+  <div className="flex flex-wrap justify-center gap-3 mt-6">
+    <span className="text-sm text-muted-foreground">✓ Transparent</span>
+    <span className="text-sm text-muted-foreground">✓ Fair</span>
+    <span className="text-sm text-muted-foreground">✓ Secure</span>
+    <span className="text-sm text-muted-foreground">✓ Trustworthy</span>
+  </div>
+</div>
 
         <div className="max-w-4xl mx-auto space-y-8">
           {/* Acceptance of Terms */}

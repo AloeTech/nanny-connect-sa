@@ -9,14 +9,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Heart, Shield, AlertTriangle, CheckCircle, Loader2, Baby, Home, UserCheck, Eye, EyeOff, Mail, ArrowLeft, CreditCard, FileText, Upload, X, Languages, Briefcase, GraduationCap, Calendar, MapPin, Phone, Globe, IdCard, Users } from "lucide-react";
+import { Heart, Shield, AlertTriangle, CheckCircle, Loader2, Baby, Home, UserCheck, Eye, EyeOff, Mail, ArrowLeft, CreditCard, FileText, Upload, X, Briefcase, MapPin, Phone, IdCard, Info } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useNavigate } from "react-router-dom";
 import { SOUTH_AFRICAN_CITIES } from '@/data/southAfricanCities';
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
-// Language options
+// Language options - same as profile
 const SA_LANGUAGES = [
   'Afrikaans', 'English', 'Zulu', 'Xhosa', 'Sotho', 'Tswana',
   'Pedi', 'Venda', 'Tsonga', 'Swati', 'Ndebele', 'Shona', 'Chewa'
@@ -39,12 +39,18 @@ const EDUCATION_LEVELS = [
   { value: 'degree', label: 'Degree' }
 ];
 
-// Experience types
+// Experience types - INCLUDING new ones
 const EXPERIENCE_TYPES = [
   { value: 'nanny', label: 'Nanny only' },
   { value: 'cleaning', label: 'Cleaning only' },
-  { value: 'both', label: 'Both nanny & cleaning' }
+  { value: 'both', label: 'Both nanny & cleaning' },
+  { value: 'general_worker', label: 'General Worker' },
+  { value: 'promoter', label: 'Promoter' },
+  { value: 'admin_assistant', label: 'Admin Assistant' }
 ];
+
+// Experience types that don't require bank details
+const NO_BANK_REQUIRED_TYPES = ['general_worker', 'promoter', 'admin_assistant'];
 
 // Employment types
 const EMPLOYMENT_TYPES = [
@@ -58,7 +64,7 @@ const ACCOMMODATION_TYPES = [
   { value: 'live_out', label: 'Live Out' }
 ];
 
-// Experience duration options - includes 0
+// Experience duration options
 const EXPERIENCE_DURATION_OPTIONS = [
   { label: '0 years (No experience)', value: 0 },
   { label: '1-2 years', value: 2 },
@@ -86,7 +92,96 @@ const calculateAge = (dateOfBirth: string): number | null => {
   }
 };
 
-// Post-Registration Document Upload Modal Component - COMPLETE VERSION
+// Function to save/update nanny profile data after registration
+const saveNannyProfileData = async (userId: string, data: any) => {
+  try {
+    const updateData: any = {
+      bio: data.bio || '',
+      languages: data.languages || [],
+      experience_type: data.experience_type || 'nanny',
+      employment_type: data.employment_type || 'full_time',
+      experience_duration: data.experience_duration || 0,
+      education_level: data.education_level || 'matric',
+      hourly_rate: data.hourly_rate || 50,
+      accommodation_preference: data.accommodation_preference || 'live_out',
+      date_of_birth: data.date_of_birth || '',
+      nationality: data.nationality || '',
+      updated_at: new Date().toISOString()
+    };
+
+    // Only add bank details if they are provided and not placeholders
+    if (data.bank_name && data.bank_name !== 'XXXXXXXX' && data.bank_name.trim() !== '') {
+      updateData.bank_name = data.bank_name.trim();
+      updateData.account_number = data.account_number?.trim() || '';
+      updateData.account_holder_name = data.account_holder_name?.trim() || '';
+    }
+
+    console.log('📤 Updating nanny profile with:', updateData);
+    
+    // First try to update
+    const { error: updateError } = await supabase
+      .from('nannies')
+      .update(updateData)
+      .eq('user_id', userId);
+
+    if (updateError) {
+      console.error('❌ Supabase update error:', updateError);
+      
+      // If update fails (record might not exist), try to insert
+      console.log('🔄 Update failed, attempting to insert...');
+      const { error: insertError } = await supabase
+        .from('nannies')
+        .insert({
+          user_id: userId,
+          ...updateData,
+          criminal_check_status: 'pending',
+          credit_check_status: 'pending',
+          proof_of_residence_status: 'pending',
+          profile_approved: false,
+          academy_completed: false,
+          created_at: new Date().toISOString()
+        });
+
+      if (insertError) {
+        console.error('❌ Supabase insert error:', insertError);
+        throw insertError;
+      }
+      console.log('✅ Nanny profile inserted successfully!');
+    } else {
+      console.log('✅ Nanny profile updated successfully!');
+    }
+    
+    return { success: true };
+  } catch (error) {
+    console.error('🔥 Error saving nanny profile:', error);
+    return { success: false, error };
+  }
+};
+
+// Function to save client profile data after registration
+const saveClientProfileData = async (userId: string) => {
+  try {
+    const clientData = {
+      user_id: userId,
+      description: '',
+      preferred_employment_type: 'full_time',
+      preferred_experience_type: 'nanny',
+      preferred_accommodation_type: 'stay_out'
+    };
+
+    const { error } = await supabase
+      .from('clients')
+      .insert([clientData]);
+
+    if (error) throw error;
+    return { success: true };
+  } catch (error) {
+    console.error('Error saving client profile:', error);
+    return { success: false, error };
+  }
+};
+
+// Post-Registration Document Upload Modal Component
 function DocumentUploadModal({ userId, userType, onComplete, onSkip }: { 
   userId: string; 
   userType: string;
@@ -214,11 +309,9 @@ function DocumentUploadModal({ userId, userType, onComplete, onSkip }: {
       const { data: { publicUrl } } = supabase.storage.from(doc.bucket).getPublicUrl(fileName);
       setUploadedDocs(prev => ({ ...prev, [`${docKey}_url`]: publicUrl }));
       
-      // Save to database immediately
       const updateData: any = {};
       updateData[doc.dbField] = publicUrl;
       
-      // Add status fields for criminal and credit checks
       if (docKey === 'criminal') updateData.criminal_check_status = 'pending';
       if (docKey === 'credit') updateData.credit_check_status = 'pending';
       if (docKey === 'proof') updateData.proof_of_residence_status = 'pending';
@@ -312,7 +405,7 @@ function DocumentUploadModal({ userId, userType, onComplete, onSkip }: {
           <div className="bg-amber-50 border border-amber-200 rounded-md p-3">
             <p className="text-xs text-amber-800">
               <AlertTriangle className="h-3 w-3 inline mr-1" />
-              <strong>Important:</strong> Criminal check and credit check documents are optional and can be uploaded later. You can also upload all documents from your profile page after registration.
+              <strong>Important:</strong> Criminal check and credit check documents are optional and can be uploaded later.
             </p>
           </div>
           
@@ -337,12 +430,10 @@ export default function Auth() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [showVerificationView, setShowVerificationView] = useState(false);
   const [verificationEmail, setVerificationEmail] = useState('');
-  const [newLanguage, setNewLanguage] = useState('');
   const [showDocumentModal, setShowDocumentModal] = useState(false);
   const [registeredUserId, setRegisteredUserId] = useState<string | null>(null);
   const [registeredUserType, setRegisteredUserType] = useState<string | null>(null);
 
-  // Terms agreement
   const [termsAgreed, setTermsAgreed] = useState(false);
 
   // Sign In Form
@@ -351,22 +442,17 @@ export default function Auth() {
     password: ''
   });
 
-  // Sign Up Form – Conditional based on user type
+  // Sign Up Form
   const [signUpData, setSignUpData] = useState({
-    // Basic Info (Step 1 - EVERYONE)
     firstName: '',
     lastName: '',
     dateOfBirth: '',
     nationality: '',
-    // Contact (Step 2 - EVERYONE)
     email: '',
     phone: '',
-    // Location (Step 3 - EVERYONE)
     city: '',
     town: '',
-    // Role (Step 4 - EVERYONE)
     userType: '',
-    // Professional Details (Step 5 - ONLY NANNIES/CLEANERS)
     bio: '',
     languages: [] as string[],
     experience_type: 'nanny',
@@ -375,10 +461,8 @@ export default function Auth() {
     hourly_rate: 50,
     employment_type: 'full_time',
     accommodation_preference: 'live_out',
-    // Password (Step 6 for nannies, Step 5 for clients)
     password: '',
     confirmPassword: '',
-    // Bank Details (Step 6 - ONLY NANNIES/CLEANERS)
     bankName: '',
     accountNumber: '',
     accountHolderName: ''
@@ -399,14 +483,12 @@ export default function Auth() {
     }
   }, [user, navigate]);
 
-  // Update progress based on signup step and user type
   useEffect(() => {
     const totalSteps = signUpData.userType === 'nanny' ? 6 : 5;
     const progressValue = (signUpStep / totalSteps) * 100;
     setProgress(progressValue);
   }, [signUpStep, signUpData.userType]);
 
-  // Check password strength
   useEffect(() => {
     const strengthChecks = {
       length: signUpData.password.length >= 8,
@@ -421,6 +503,10 @@ export default function Auth() {
     setPasswordStrength((score / 5) * 100);
   }, [signUpData.password]);
 
+  const isBankDetailsRequired = () => {
+    return !NO_BANK_REQUIRED_TYPES.includes(signUpData.experience_type);
+  };
+
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -431,8 +517,6 @@ export default function Auth() {
           setVerificationEmail(signInData.email);
           setShowVerificationView(true);
           toast({ title: "Email Verification Required", description: "Please verify your email address before signing in.", variant: "default" });
-        } else {
-          throw error;
         }
       }
     } catch (error: any) {
@@ -442,15 +526,15 @@ export default function Auth() {
     }
   };
 
-  const addLanguage = () => {
-    if (newLanguage.trim() && !signUpData.languages.includes(newLanguage.trim())) {
-      setSignUpData(prev => ({ ...prev, languages: [...prev.languages, newLanguage.trim()] }));
-      setNewLanguage('');
-    }
-  };
-
-  const removeLanguage = (language: string) => {
-    setSignUpData(prev => ({ ...prev, languages: prev.languages.filter(l => l !== language) }));
+  // Language toggle function (checkbox style like profile)
+  const toggleLanguage = (language: string) => {
+    setSignUpData(prev => {
+      if (prev.languages.includes(language)) {
+        return { ...prev, languages: prev.languages.filter(l => l !== language) };
+      } else {
+        return { ...prev, languages: [...prev.languages, language] };
+      }
+    });
   };
 
   const getTotalSteps = () => {
@@ -465,7 +549,7 @@ export default function Auth() {
         case 3: return "Location";
         case 4: return "Select Your Role";
         case 5: return "Professional Details";
-        case 6: return "Password & Bank Details";
+        case 6: return isBankDetailsRequired() ? "Password & Bank Details" : "Create Password";
         default: return "";
       }
     } else {
@@ -484,16 +568,16 @@ export default function Auth() {
     const isNanny = signUpData.userType === 'nanny';
     
     switch (step) {
-      case 1: // Personal Info - EVERYONE
+      case 1:
         return signUpData.firstName.trim() && signUpData.lastName.trim() && signUpData.dateOfBirth.trim() && signUpData.nationality.trim();
-      case 2: // Contact Details - EVERYONE
+      case 2:
         return signUpData.email.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(signUpData.email) &&
                signUpData.phone.trim() && /^\+27\d{9}$/.test(signUpData.phone.replace(/\s/g, ''));
-      case 3: // Location - EVERYONE
+      case 3:
         return signUpData.city && signUpData.town.trim();
-      case 4: // Role Selection - EVERYONE
+      case 4:
         return !!signUpData.userType;
-      case 5: // For nannies: Professional Details | For clients: Password
+      case 5:
         if (isNanny) {
           return signUpData.bio.trim() && 
                  signUpData.languages.length > 0 && 
@@ -501,13 +585,16 @@ export default function Auth() {
         } else {
           return passwordStrength >= 60 && signUpData.password === signUpData.confirmPassword;
         }
-      case 6: // For nannies: Password & Bank Details
+      case 6:
         if (isNanny) {
-          return passwordStrength >= 60 && 
-                 signUpData.password === signUpData.confirmPassword &&
-                 signUpData.bankName.trim() !== '' &&
-                 signUpData.accountNumber.trim() !== '' &&
-                 signUpData.accountHolderName.trim() !== '';
+          const passwordValid = passwordStrength >= 60 && signUpData.password === signUpData.confirmPassword;
+          if (isBankDetailsRequired()) {
+            return passwordValid &&
+                   signUpData.bankName.trim() !== '' &&
+                   signUpData.accountNumber.trim() !== '' &&
+                   signUpData.accountHolderName.trim() !== '';
+          }
+          return passwordValid;
         }
         return false;
       default:
@@ -533,13 +620,17 @@ export default function Auth() {
         break;
       case 5:
         if (isNanny) {
-          toast({ title: "Professional Details Required", description: "Please complete your bio, languages, and hourly rate.", variant: "destructive" });
+          toast({ title: "Professional Details Required", description: "Please complete your bio, select languages, and set your hourly rate.", variant: "destructive" });
         } else {
           toast({ title: "Password Requirements", description: "Please ensure your password is strong and matches confirmation.", variant: "destructive" });
         }
         break;
       case 6:
-        toast({ title: "Incomplete Information", description: "Please ensure passwords match and bank details are complete.", variant: "destructive" });
+        if (isNanny && isBankDetailsRequired()) {
+          toast({ title: "Incomplete Information", description: "Please ensure passwords match and bank details are complete.", variant: "destructive" });
+        } else {
+          toast({ title: "Password Requirements", description: "Please ensure your password is strong and matches confirmation.", variant: "destructive" });
+        }
         break;
     }
   };
@@ -551,7 +642,6 @@ export default function Auth() {
     }
     if (validateStep(signUpStep)) {
       setSignUpStep(prev => Math.min(prev + 1, getTotalSteps()));
-      toast({ title: `Step ${signUpStep + 1} of ${getTotalSteps()}`, description: getStepDescription(signUpStep + 1) });
     } else {
       showValidationToast(signUpStep);
     }
@@ -561,77 +651,118 @@ export default function Auth() {
     setSignUpStep(prev => Math.max(prev - 1, 1));
   };
 
-  const handleSignUp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!termsAgreed) {
-      toast({ title: "Terms & Privacy Required", description: "You must agree to the Terms of Service and Privacy Policy to create an account.", variant: "destructive" });
-      return;
-    }
-    if (!validateStep(getTotalSteps())) {
-      toast({ title: "Incomplete Form", description: "Please complete all required fields.", variant: "destructive" });
-      return;
-    }
-
-    setIsCreatingAccount(true);
-    const inputs = document.querySelectorAll('input, select, button');
-    inputs.forEach(el => el.setAttribute('disabled', 'true'));
-
-    try {
-      const metadata: any = {
-        first_name: signUpData.firstName,
-        last_name: signUpData.lastName,
-        date_of_birth: signUpData.dateOfBirth,
-        nationality: signUpData.nationality,
-        phone: signUpData.phone,
-        city: signUpData.city,
-        suburb: signUpData.town,
-        user_type: signUpData.userType
-      };
-
-      // Only add nanny-specific fields if user is a nanny
-      if (signUpData.userType === 'nanny') {
-        metadata.bio = signUpData.bio;
-        metadata.languages = signUpData.languages;
-        metadata.experience_type = signUpData.experience_type;
-        metadata.experience_duration = signUpData.experience_duration;
-        metadata.education_level = signUpData.education_level;
-        metadata.hourly_rate = signUpData.hourly_rate;
-        metadata.employment_type = signUpData.employment_type;
-        metadata.accommodation_preference = signUpData.accommodation_preference;
-        metadata.bank_name = signUpData.bankName.trim();
-        metadata.account_number = signUpData.accountNumber.trim();
-        metadata.account_holder_name = signUpData.accountHolderName.trim();
-      }
-
-      const signUpResult: any = await signUp(signUpData.email, signUpData.password, metadata);
-      const { data, error } = signUpResult;
-
-      if (error) {
-        if (error.message?.toLowerCase().includes('already registered') || error.message?.includes('409')) {
-          toast({ title: "Email Already Registered", description: ( <span>A user with this email already exists. Please <button className="underline font-medium text-primary" onClick={() => (document.querySelector('[value="signin"]') as HTMLElement)?.click()}>sign in</button> or contact support.</span> ), duration: 10000, variant: "destructive" });
-        } else {
-          toast({ title: "Account Creation Failed", description: error.message || "An unexpected error occurred.", variant: "destructive" });
-        }
-      } else {
-        setVerificationEmail(signUpData.email);
-        
-        // Store the user ID and type for document upload modal (only for nannies)
-        if (data?.user?.id && signUpData.userType === 'nanny') {
-          setRegisteredUserId(data.user.id);
-          setRegisteredUserType(signUpData.userType);
-          setShowDocumentModal(true);
-        }
-        
-        setShowVerificationView(true);
-        toast({ title: "Account Created Successfully!", description: "Please check your email to verify your account.", variant: "default" });
-      }
-    } catch (error: any) {
-      toast({ title: "Account Creation Failed", description: error.message || "Please try again.", variant: "destructive" });
-    } finally {
-      inputs.forEach(el => el.removeAttribute('disabled'));
-      setIsCreatingAccount(false);
-    }
+  const getUniqueCities = () => {
+    const uniqueCities = new Set(SOUTH_AFRICAN_CITIES);
+    return Array.from(uniqueCities);
   };
+
+  const handleSignUp = async (e: React.FormEvent) => {
+  e.preventDefault();
+  if (!termsAgreed) {
+    toast({ title: "Terms & Privacy Required", description: "You must agree to the Terms of Service and Privacy Policy to continue.", variant: "destructive" });
+    return;
+  }
+  if (!validateStep(getTotalSteps())) {
+    toast({ title: "Incomplete Form", description: "Please complete all required fields.", variant: "destructive" });
+    return;
+  }
+
+  setIsCreatingAccount(true);
+  const inputs = document.querySelectorAll('input, select, button');
+  inputs.forEach(el => el.setAttribute('disabled', 'true'));
+
+  try {
+    // Prepare metadata - send ALL fields to the Edge Function
+    const metadata: any = {
+      first_name: signUpData.firstName,
+      last_name: signUpData.lastName,
+      phone: signUpData.phone,
+      city: signUpData.city,
+      suburb: signUpData.town,
+      user_type: signUpData.userType,
+      // Personal fields
+      date_of_birth: signUpData.dateOfBirth,
+      nationality: signUpData.nationality,
+      // Professional fields
+      bio: signUpData.bio,
+      languages: JSON.stringify(signUpData.languages), // Send as JSON string
+      experience_type: signUpData.experience_type,
+      experience_duration: signUpData.experience_duration,
+      education_level: signUpData.education_level,
+      hourly_rate: signUpData.hourly_rate,
+      employment_type: signUpData.employment_type,
+      accommodation_preference: signUpData.accommodation_preference,
+      // Bank details - always send with placeholders if not required
+      bank_name: isBankDetailsRequired() ? signUpData.bankName.trim() || 'XXXXXXXX' : 'XXXXXXXX',
+      account_number: isBankDetailsRequired() ? signUpData.accountNumber.trim() || 'XXXXXXXX' : 'XXXXXXXX',
+      account_holder_name: isBankDetailsRequired() ? signUpData.accountHolderName.trim() || 'XXXXXXXX' : 'XXXXXXXX',
+    };
+
+    console.log('📤 Sending to Edge Function with ALL fields:', metadata);
+
+    // Call signUp - this uses the Edge Function
+    const signUpResult: any = await signUp(signUpData.email, signUpData.password, metadata);
+    const { data, error } = signUpResult;
+
+    if (error) {
+      console.error('❌ Signup error:', error);
+      if (error.message?.toLowerCase().includes('already registered') || error.message?.includes('409')) {
+        toast({ 
+          title: "Email Already Registered", 
+          description: ( 
+            <span>A user with this email already exists. Please <button className="underline font-medium text-primary" onClick={() => (document.querySelector('[value="signin"]') as HTMLElement)?.click()}>sign in</button> or contact support.</span> 
+          ), 
+          duration: 10000, 
+          variant: "destructive" 
+        });
+      } else {
+        toast({ 
+          title: "Account Creation Failed", 
+          description: error.message || "An unexpected error occurred.", 
+          variant: "destructive" 
+        });
+      }
+      setIsCreatingAccount(false);
+      inputs.forEach(el => el.removeAttribute('disabled'));
+      return;
+    }
+
+    console.log('✅ Edge Function succeeded with ALL fields:', data);
+
+    // Get the user ID from the response
+    let userId = data?.user?.id;
+    
+    if (!userId) {
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      userId = currentUser?.id;
+    }
+
+    if (userId && signUpData.userType === 'nanny') {
+      // Set the user ID for document upload modal
+      setRegisteredUserId(userId);
+      setRegisteredUserType(signUpData.userType);
+      setShowDocumentModal(true);
+    }
+
+    setVerificationEmail(signUpData.email);
+    setShowVerificationView(true);
+    toast({ 
+      title: "Account Created Successfully!", 
+      description: "Please check your email to verify your account.", 
+      variant: "default" 
+    });
+  } catch (error: any) {
+    console.error('🔥 Signup error:', error);
+    toast({ 
+      title: "Account Creation Failed", 
+      description: error.message || "Please try again.", 
+      variant: "destructive" 
+    });
+  } finally {
+    inputs.forEach(el => el.removeAttribute('disabled'));
+    setIsCreatingAccount(false);
+  }
+};
 
   const handleDocumentModalComplete = () => {
     setShowDocumentModal(false);
@@ -693,10 +824,10 @@ export default function Auth() {
 
   const totalSteps = getTotalSteps();
   const isNanny = signUpData.userType === 'nanny';
+  const uniqueCities = getUniqueCities();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/10 to-secondary/20 flex items-center justify-center p-4 relative">
-      {/* Document Upload Modal - Shows after registration for nannies only */}
       {showDocumentModal && registeredUserId && registeredUserType === 'nanny' && (
         <DocumentUploadModal
           userId={registeredUserId}
@@ -721,7 +852,6 @@ export default function Auth() {
         <Tabs defaultValue="signin" className="w-full">
           <TabsList className="grid w-full grid-cols-2"><TabsTrigger value="signin">Sign In</TabsTrigger><TabsTrigger value="signup">Sign Up</TabsTrigger></TabsList>
 
-          {/* Sign In */}
           <TabsContent value="signin">
             <Card>
               <CardHeader><CardTitle>Welcome Back</CardTitle><CardDescription>Sign in to your account</CardDescription></CardHeader>
@@ -735,7 +865,6 @@ export default function Auth() {
             </Card>
           </TabsContent>
 
-          {/* Sign Up - Conditional Steps */}
           <TabsContent value="signup">
             <Card>
               <CardHeader>
@@ -746,7 +875,6 @@ export default function Auth() {
               <CardContent>
                 <form onSubmit={handleSignUp} id="signup-form" className="space-y-4">
 
-                  {/* STEP 1: Personal Information - EVERYONE */}
                   {signUpStep === 1 && (
                     <div className="space-y-4">
                       <div className="flex items-center gap-3 p-3 bg-primary/5 rounded-lg"><UserCheck className="h-6 w-6 text-primary" /><p className="text-sm text-gray-600">Your personal information helps us verify your identity</p></div>
@@ -762,7 +890,6 @@ export default function Auth() {
                     </div>
                   )}
 
-                  {/* STEP 2: Contact Details - EVERYONE */}
                   {signUpStep === 2 && (
                     <div className="space-y-4">
                       <div className="flex items-center gap-3 p-3 bg-primary/5 rounded-lg"><Phone className="h-6 w-6 text-primary" /><p className="text-sm text-gray-600">We'll use this to contact you</p></div>
@@ -771,36 +898,56 @@ export default function Auth() {
                     </div>
                   )}
 
-                  {/* STEP 3: Location - EVERYONE */}
                   {signUpStep === 3 && (
                     <div className="space-y-4">
                       <div className="flex items-center gap-3 p-3 bg-primary/5 rounded-lg"><MapPin className="h-6 w-6 text-primary" /><p className="text-sm text-gray-600">Your location helps match you with local opportunities</p></div>
-                      <div><Label>City *</Label><Select value={signUpData.city} onValueChange={(value) => setSignUpData(prev => ({ ...prev, city: value }))}><SelectTrigger><SelectValue placeholder="Select your city" /></SelectTrigger><SelectContent>{SOUTH_AFRICAN_CITIES.map(city => <SelectItem key={city} value={city}>{city}</SelectItem>)}</SelectContent></Select></div>
+                      <div><Label>City *</Label><Select value={signUpData.city} onValueChange={(value) => setSignUpData(prev => ({ ...prev, city: value }))}><SelectTrigger><SelectValue placeholder="Select your city" /></SelectTrigger><SelectContent>
+                        {uniqueCities.map(city => <SelectItem key={city} value={city}>{city}</SelectItem>)}
+                      </SelectContent></Select></div>
                       <div><Label>Town/Suburb *</Label><Input value={signUpData.town} onChange={(e) => setSignUpData(prev => ({ ...prev, town: e.target.value }))} required /></div>
                     </div>
                   )}
 
-                  {/* STEP 4: Select Role - EVERYONE */}
                   {signUpStep === 4 && (
                     <div className="space-y-4">
                       <div className="flex items-center gap-3 p-3 bg-primary/5 rounded-lg"><UserCheck className="h-6 w-6 text-primary" /><p className="text-sm text-gray-600">Tell us how you'll use the platform</p></div>
-                      <div><Label>I am a... *</Label><Select value={signUpData.userType} onValueChange={(value) => setSignUpData(prev => ({ ...prev, userType: value }))}><SelectTrigger><SelectValue placeholder="Select your role" /></SelectTrigger><SelectContent><SelectItem value="client"><div className="flex items-center gap-2"><Home className="h-4 w-4" />Family looking for a nanny</div></SelectItem><SelectItem value="nanny"><div className="flex items-center gap-2"><Baby className="h-4 w-4" />Nanny / Cleaner looking for work</div></SelectItem></SelectContent></Select></div>
+                      <div><Label>I am a... *</Label><Select value={signUpData.userType} onValueChange={(value) => setSignUpData(prev => ({ ...prev, userType: value }))}><SelectTrigger><SelectValue placeholder="Select your role" /></SelectTrigger><SelectContent><SelectItem value="client"><div className="flex items-center gap-2"><Home className="h-4 w-4" />Family looking for a nanny</div></SelectItem><SelectItem value="nanny"><div className="flex items-center gap-2"><Baby className="h-4 w-4" />Nanny | Cleaner | General Worker | Promoter | Admin Assistant</div></SelectItem></SelectContent></Select></div>
                     </div>
                   )}
 
-                  {/* STEP 5: For NANNIES - Professional Details | For CLIENTS - Create Password */}
                   {signUpStep === 5 && (
                     <div className="space-y-4">
                       {isNanny ? (
-                        // NANNY: Professional Details
                         <>
                           <div className="flex items-center gap-3 p-3 bg-primary/5 rounded-lg"><Briefcase className="h-6 w-6 text-primary" /><p className="text-sm text-gray-600">Tell us about your experience and skills</p></div>
                           <div><Label>Bio / About Me *</Label><Textarea rows={3} value={signUpData.bio} onChange={(e) => setSignUpData(prev => ({ ...prev, bio: e.target.value }))} placeholder="Tell families about yourself, your experience, and what makes you special..." required /></div>
                           
-                          <div><Label>Languages Spoken *</Label><div className="flex gap-2 mb-2"><Input placeholder="Add a language" value={newLanguage} onChange={(e) => setNewLanguage(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addLanguage())} /><Button type="button" onClick={addLanguage}>Add</Button></div><div className="flex flex-wrap gap-2">{signUpData.languages.map(lang => (<Badge key={lang} className="flex items-center gap-1">{lang}<X className="h-3 w-3 cursor-pointer" onClick={() => removeLanguage(lang)} /></Badge>))}</div></div>
+                          {/* Languages - Using checkboxes like in profile */}
+                          <div>
+                            <Label>Languages Spoken *</Label>
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-2">
+                              {SA_LANGUAGES.map(language => (
+                                <div key={language} className="flex items-center space-x-2">
+                                  <Checkbox
+                                    id={`lang-${language}`}
+                                    checked={signUpData.languages.includes(language)}
+                                    onCheckedChange={() => toggleLanguage(language)}
+                                  />
+                                  <Label htmlFor={`lang-${language}`} className="text-sm cursor-pointer">{language}</Label>
+                                </div>
+                              ))}
+                            </div>
+                            {signUpData.languages.length > 0 && (
+                              <div className="mt-2 flex flex-wrap gap-1">
+                                {signUpData.languages.map(lang => (
+                                  <Badge key={lang} variant="secondary" className="text-xs">{lang}</Badge>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                           
                           <div className="grid grid-cols-2 gap-4">
-                            <div><Label>Experience Type *</Label><Select value={signUpData.experience_type} onValueChange={(value) => setSignUpData(prev => ({ ...prev, experience_type: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{EXPERIENCE_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent></Select></div>
+                            <div><Label>Application Type *</Label><Select value={signUpData.experience_type} onValueChange={(value) => setSignUpData(prev => ({ ...prev, experience_type: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{EXPERIENCE_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent></Select></div>
                             <div><Label>Experience Duration</Label><Select value={EXPERIENCE_DURATION_OPTIONS.find(opt => opt.value === signUpData.experience_duration)?.label || '0 years (No experience)'} onValueChange={(label) => { const selected = EXPERIENCE_DURATION_OPTIONS.find(opt => opt.label === label); setSignUpData(prev => ({ ...prev, experience_duration: selected ? selected.value : 0 })); }}><SelectTrigger><SelectValue placeholder="Select experience" /></SelectTrigger><SelectContent>{EXPERIENCE_DURATION_OPTIONS.map(opt => <SelectItem key={opt.value} value={opt.label}>{opt.label}</SelectItem>)}</SelectContent></Select></div>
                           </div>
 
@@ -815,7 +962,6 @@ export default function Auth() {
                           </div>
                         </>
                       ) : (
-                        // CLIENT: Create Password
                         <>
                           <div className="flex items-center gap-3 p-3 bg-primary/5 rounded-lg"><Shield className="h-6 w-6 text-primary" /><p className="text-sm text-gray-600">Create a strong password to secure your account</p></div>
                           <div><Label>Password *</Label><Input type={showPassword ? "text" : "password"} value={signUpData.password} onChange={(e) => setSignUpData(prev => ({ ...prev, password: e.target.value }))} required /><div className="mt-2"><div className="flex justify-between"><span className="text-xs">Strength: {getStrengthText(passwordStrength)}</span><span className="text-xs">{Math.round(passwordStrength)}%</span></div><div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden"><div className={`h-full transition-all ${getStrengthColor(passwordStrength)}`} style={{ width: `${passwordStrength}%` }}></div></div><div className="mt-2 text-xs space-y-1">{Object.entries(passwordValidation).map(([key, isValid]) => (<div key={key} className="flex items-center gap-2">{isValid ? <CheckCircle className="h-3 w-3 text-green-500" /> : <div className="h-3 w-3 rounded-full border border-gray-300" />}<span className={isValid ? 'text-green-600' : 'text-gray-500'}>{key === 'length' && 'At least 8 characters'}{key === 'uppercase' && 'One uppercase letter'}{key === 'lowercase' && 'One lowercase letter'}{key === 'number' && 'One number'}{key === 'special' && 'One special character'}</span></div>))}</div></div></div>
@@ -825,25 +971,34 @@ export default function Auth() {
                     </div>
                   )}
 
-                  {/* STEP 6: For NANNIES ONLY - Password & Bank Details */}
                   {signUpStep === 6 && isNanny && (
                     <div className="space-y-4">
                       <div><Label>Password *</Label><Input type={showPassword ? "text" : "password"} value={signUpData.password} onChange={(e) => setSignUpData(prev => ({ ...prev, password: e.target.value }))} required /><div className="mt-2"><div className="flex justify-between"><span className="text-xs">Strength: {getStrengthText(passwordStrength)}</span><span className="text-xs">{Math.round(passwordStrength)}%</span></div><div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden"><div className={`h-full transition-all ${getStrengthColor(passwordStrength)}`} style={{ width: `${passwordStrength}%` }}></div></div><div className="mt-2 text-xs space-y-1">{Object.entries(passwordValidation).map(([key, isValid]) => (<div key={key} className="flex items-center gap-2">{isValid ? <CheckCircle className="h-3 w-3 text-green-500" /> : <div className="h-3 w-3 rounded-full border border-gray-300" />}<span className={isValid ? 'text-green-600' : 'text-gray-500'}>{key === 'length' && 'At least 8 characters'}{key === 'uppercase' && 'One uppercase letter'}{key === 'lowercase' && 'One lowercase letter'}{key === 'number' && 'One number'}{key === 'special' && 'One special character'}</span></div>))}</div></div></div>
 
                       <div><Label>Confirm Password *</Label><Input type={showConfirmPassword ? "text" : "password"} value={signUpData.confirmPassword} onChange={(e) => setSignUpData(prev => ({ ...prev, confirmPassword: e.target.value }))} required /></div>
 
-                      <div className="space-y-4 pt-4 border-t">
-                        <div className="flex items-center gap-2"><CreditCard className="h-5 w-5 text-primary" /><h4 className="font-semibold">Bank Details for Payments</h4></div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div><Label>Bank Name *</Label><Input placeholder="e.g. FNB, Standard Bank" value={signUpData.bankName} onChange={(e) => setSignUpData(prev => ({ ...prev, bankName: e.target.value }))} required /></div>
-                          <div><Label>Account Number *</Label><Input placeholder="Account number" value={signUpData.accountNumber} onChange={(e) => setSignUpData(prev => ({ ...prev, accountNumber: e.target.value }))} required /></div>
+                      {isBankDetailsRequired() && (
+                        <div className="space-y-4 pt-4 border-t">
+                          <div className="flex items-center gap-2"><CreditCard className="h-5 w-5 text-primary" /><h4 className="font-semibold">Bank Details for Payments</h4></div>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div><Label>Bank Name *</Label><Input placeholder="e.g. FNB, Standard Bank" value={signUpData.bankName} onChange={(e) => setSignUpData(prev => ({ ...prev, bankName: e.target.value }))} required /></div>
+                            <div><Label>Account Number *</Label><Input placeholder="Account number" value={signUpData.accountNumber} onChange={(e) => setSignUpData(prev => ({ ...prev, accountNumber: e.target.value }))} required /></div>
+                          </div>
+                          <div><Label>Account Holder Name *</Label><Input placeholder="Full name on account" value={signUpData.accountHolderName} onChange={(e) => setSignUpData(prev => ({ ...prev, accountHolderName: e.target.value }))} required /></div>
                         </div>
-                        <div><Label>Account Holder Name *</Label><Input placeholder="Full name on account" value={signUpData.accountHolderName} onChange={(e) => setSignUpData(prev => ({ ...prev, accountHolderName: e.target.value }))} required /></div>
-                      </div>
+                      )}
+
+                      {!isBankDetailsRequired() && (
+                        <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                          <p className="text-sm text-blue-700">
+                            <Info className="h-4 w-4 inline mr-1" />
+                            Bank details are not required for {signUpData.experience_type.replace('_', ' ')} roles.
+                          </p>
+                        </div>
+                      )}
                     </div>
                   )}
 
-                  {/* Terms & Navigation */}
                   <div className="space-y-4 pt-4">
                     <div className="flex items-start gap-3"><input type="checkbox" id="terms-agreed" checked={termsAgreed} onChange={(e) => setTermsAgreed(e.target.checked)} className="mt-1" /><label htmlFor="terms-agreed" className="text-sm">I agree to the <a href="https://nannyplacementssouthafrica.co.za/terms" target="_blank" className="text-primary hover:underline">Terms of Service</a> and <a href="https://nannyplacementssouthafrica.co.za/privacy" target="_blank" className="text-primary hover:underline">Privacy Policy</a></label></div>
                     <div className="flex gap-3">
@@ -857,7 +1012,7 @@ export default function Auth() {
                 <p className="text-xs text-amber-800"><strong>Important:</strong> All information provided is <strong>final</strong> and cannot be edited later. Please double-check before creating your account.</p>
               </div>
               <div className="mx-4 mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
-                <p className="text-xs text-blue-700">📄 <strong>After registration:</strong> Nannies/Cleaners will be prompted to upload their CV, ID/Passport, Proof of Residence, Criminal Check, and Credit Check documents. These can also be uploaded later from your profile.</p>
+                <p className="text-xs text-blue-700">📄 <strong>After registration:</strong> Nannies/Cleaners will be prompted to upload their CV, ID/Passport, Proof of Residence, Criminal Check, and Credit Check documents.</p>
               </div>
             </Card>
             <div className="flex justify-center gap-2 mt-4">{Array.from({ length: totalSteps }).map((_, step) => (<div key={step} className={`w-2 h-2 rounded-full transition-all ${step + 1 === signUpStep ? 'bg-primary w-4' : step + 1 < signUpStep ? 'bg-primary/50' : 'bg-gray-300'}`} />))}</div>
